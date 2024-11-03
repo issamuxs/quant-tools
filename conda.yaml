@@ -1,0 +1,12 @@
+channels:
+- conda-forge
+dependencies:
+- python=3.11.7
+- pip<=24.2
+- pip:
+  - backtrader=1.9.78.12
+  - ccxt=4.4.25
+  - pandas
+  - matplotlib=3.2.2
+  - ipympl
+name: quant
