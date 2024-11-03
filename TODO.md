@@ -1,0 +1,2 @@
+- Check distribution of minimum of risk-adjusted returns over any sample to validate strategy performance at any starting time
+- Find a way to manage risk of high volatility in 2 candles
