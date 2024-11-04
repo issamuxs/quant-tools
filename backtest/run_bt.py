@@ -1,6 +1,7 @@
 import backtrader as bt
 import pandas as pd
 import numpy as np
+from datetime import datetime
 from utils.fetch_data import fetch_crypto_data
 from utils.prep_data import align_data_periods, format_data_cerebro
 
@@ -40,7 +41,7 @@ def run_backtest(start_date, strategy_class, stf, ltf, period_length_days, start
     # Get and prepare data
     df_stf = fetch_crypto_data(symbol='BTC/USDT', timeframe=stf, start_date=start_date, end_date=end_date, limit=limit)
     df_ltf = fetch_crypto_data(symbol='BTC/USDT', timeframe=ltf, start_date=start_date, end_date=end_date, limit=limit)
-    df_stf, df_ltf = align_data_periods(df_stf, df_ltf)
+    [df_stf, df_ltf] = align_data_periods([df_stf, df_ltf])
     [data_stf, data_ltf] = format_data_cerebro([df_stf, df_ltf])
     
     # Setup cerebro
@@ -67,7 +68,8 @@ def run_backtest(start_date, strategy_class, stf, ltf, period_length_days, start
         'win_trades': trades.won.total if hasattr(trades, 'won') else 0,
         'loss_trades': trades.lost.total if hasattr(trades, 'lost') else 0,
         'start_date': start_date,
-        'end_date': end_date
+        'end_date': end_date,
+        'duration': (datetime.strptime(end_date, '%Y-%m-%d') - datetime.strptime(start_date, '%Y-%m-%d')).days
     }
 
 def run_stability_analysis(start_dates, strategy_class, stf, ltf, period_length_days, starting_cash=100000, limit=10000, commission=0.001):
@@ -88,7 +90,7 @@ def run_stability_analysis(start_dates, strategy_class, stf, ltf, period_length_
     
     # Calculate statistics for each metric
     metrics = ['total_return', 'cagr', 'max_drawdown', 'ret_mdd_ratio', 
-              'n_trades', 'win_trades', 'loss_trades']
+              'n_trades', 'win_trades', 'loss_trades', 'duration']
     
     stats = {}
     for metric in metrics:
@@ -99,7 +101,7 @@ def run_stability_analysis(start_dates, strategy_class, stf, ltf, period_length_
             'ci_lower': values.mean() - 1.96 * values.std() / np.sqrt(len(values)),
             'ci_upper': values.mean() + 1.96 * values.std() / np.sqrt(len(values)),
             'min': values.min(),
-            'max': values.max()
+            'max': values.max(),
         }
     
     return df_results, stats

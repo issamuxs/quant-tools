@@ -187,12 +187,12 @@ class SmaSimpleCrossL(bt.Strategy):
 
 class SmaConfCrossLS(bt.Strategy):
     params = dict(
-        stf_pfast=10,  
-        stf_pslow=30, 
-        ltf_pfast=20,  
-        ltf_pslow=50, 
+        stf_pfast=20,  
+        stf_pslow=200, 
+        ltf_pfast=7,  
+        ltf_pslow=21, 
         risk_perc=0.99,
-        stop_loss_perc=0.015
+        stop_loss_perc=0.01
     )
 
     def __init__(self):
@@ -235,7 +235,7 @@ class SmaConfCrossLS(bt.Strategy):
         self.trade_list = []
         self.returns = []
 
-    def volume_confirmation(self, last_to_avg_volume_ratio=1.5, vol_delta_lb=1):
+    def volume_confirmation(self, last_to_avg_volume_ratio=1.2, vol_delta_lb=0.2):
         # Current volume metrics
         last_volume = self.data_stf.volume[-1]
         avg_volume = self.vol_sma[0]
@@ -243,8 +243,8 @@ class SmaConfCrossLS(bt.Strategy):
         price_change = self.price_change[0]
         
         # Volume conditions
-        above_average = last_volume > avg_volume * last_to_avg_volume_ratio  # 10% above average
-        strong_momentum = vol_delta > vol_delta_lb  # More than 1 std dev above mean
+        above_average = last_volume > avg_volume * last_to_avg_volume_ratio 
+        strong_momentum = vol_delta > vol_delta_lb  
         price_aligned = (price_change > 0 and self.crossover_stf > 0) or \
                         (price_change < 0 and self.crossover_stf < 0)
         
