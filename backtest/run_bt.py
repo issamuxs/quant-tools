@@ -35,8 +35,8 @@ def execute_backtest(strategy_class, df_list, strategy_params, starting_cash, co
     print(f"Duration days: {(df_list[0].index[-1] - df_list[0].index[0]).days}")
     print(f"Total return: {strategy.total_return:.2%}")
     print(f"CAGR: {strategy.cagr:.2%}")
-    print(f"CAGR: {strategy.max_drawdown:.2%}")
-    print(f"Return/drawdown ratio: {strategy.ret_mdd_ratio:.2f}")
+    print(f"MDD: {strategy.max_drawdown:.2%}")
+    print(f"CAGR/MDD: {strategy.cagr_mdd_ratio:.2f}")
 
 
 
@@ -44,7 +44,7 @@ def execute_backtest(strategy_class, df_list, strategy_params, starting_cash, co
         'total_return': strategy.total_return,
         'cagr': strategy.cagr,
         'max_drawdown': strategy.max_drawdown,
-        'ret_mdd_ratio': strategy.ret_mdd_ratio,
+        'cagr_mdd_ratio': strategy.cagr_mdd_ratio,
         'n_trades': trades.total.total if hasattr(trades, 'total') else 0,
         'win_trades': trades.won.total if hasattr(trades, 'won') else 0,
         'loss_trades': trades.lost.total if hasattr(trades, 'lost') else 0,
@@ -53,7 +53,7 @@ def execute_backtest(strategy_class, df_list, strategy_params, starting_cash, co
     }
 
 def run_backtest(symbol, start_date, strategy_class, timeframes, period_length_days, 
-                starting_cash, commission, limit=10000, **strategy_params):  
+                starting_cash, commission, limit, **strategy_params):  
     """
     Run backtest with data fetching and preparation
     """
@@ -78,7 +78,7 @@ def run_backtest(symbol, start_date, strategy_class, timeframes, period_length_d
     )
 
 def optimize_strategy_random(strategy_class, df_list, param_ranges, starting_cash, commission, 
-                          n_trials=20, random_state=None):
+                          n_trials, random_state):
     """
     Optimize strategy parameters using random search
     """
@@ -127,7 +127,7 @@ def optimize_strategy_random(strategy_class, df_list, param_ranges, starting_cas
    
     # Convert to DataFrame and find best parameters
     results_df = pd.DataFrame(results)
-    best_idx = results_df['ret_mdd_ratio'].idxmax()
+    best_idx = results_df['cagr_mdd_ratio'].idxmax()
     best_params = {col: results_df.loc[best_idx, col] 
                     for col in param_ranges.keys()}
    
@@ -135,12 +135,12 @@ def optimize_strategy_random(strategy_class, df_list, param_ranges, starting_cas
     print(f"Return: {results_df.loc[best_idx, 'total_return']:.2%}")
     print(f"CAGR: {results_df.loc[best_idx, 'cagr']:.2%}")
     print(f"MDD: {results_df.loc[best_idx, 'max_drawdown']:.2%}")
-    print(f"Return/drawdown ratio: {results_df.loc[best_idx, 'ret_mdd_ratio']:.2f}")
+    print(f"CAGR/MDD: {results_df.loc[best_idx, 'cagr_mdd_ratio']:.2f}")
 
    
     return results_df, best_params
 
-def generate_train_test_periods(start, end, train_length_days, test_length_days, gap_days=0, n_samples=30):
+def generate_train_test_periods(start, end, train_length_days, test_length_days, gap_days, n_samples):
     """
     Generate bootstrap samples of aligned train-test periods
     """
@@ -175,29 +175,67 @@ def generate_train_test_periods(start, end, train_length_days, test_length_days,
     
     return periods
 
+def geometric_mean(returns):
+    """Compute geometric mean for returns, allowing for negative returns"""
+    # Ensure the returns are in the form of 1 + return (e.g., 10% return is 1.1)
+    transformed_returns = np.log1p(returns)  # log(1 + return)
+    
+    # Compute the average of the transformed returns
+    mean_log_return = np.mean(transformed_returns)
+    
+    # Exponentiate back to the original scale and subtract 1 to get the geometric mean
+    gmean_return = np.expm1(mean_log_return)
+    
+    return gmean_return
+
 def calculate_stability_stats(df_results):
     """Calculate statistical metrics for backtest results"""
-    metrics = ['total_return', 'cagr', 'max_drawdown', 'ret_mdd_ratio', 
-              'n_trades', 'win_trades', 'loss_trades']
+    metrics = ['total_return', 'cagr', 'max_drawdown', 
+               'n_trades', 'win_trades', 'loss_trades']
     
     stats = {}
     for metric in metrics:
         if metric in df_results.columns:
             values = df_results[metric]
-            stats[metric] = {
-                'mean': values.mean(),
-                'std': values.std(),
-                'ci_lower': values.mean() - 1.96 * values.std() / np.sqrt(len(values)),
-                'ci_upper': values.mean() + 1.96 * values.std() / np.sqrt(len(values)),
-                'min': values.min(),
-                'max': values.max()
-            }
+            
+            # For multiplicative metrics like returns, calculate geometric mean
+            if metric in ['total_return', 'cagr']: 
+                stats[metric] = {
+                    'gmean': geometric_mean(values),  # Geometric mean for returns
+                    'mean': values.mean(),
+                    'std': values.std(),
+                    'ci_lower': np.percentile(values, 2.5),
+                    'ci_upper': np.percentile(values, 97.5),
+                    'median': np.median(values),
+                    'iqr': np.percentile(values, 75) - np.percentile(values, 25),
+                    'min': values.min(),
+                    'max': values.max()
+                }
+            else:
+                # For other metrics, handle the usual statistics (mean, median, etc.)
+                stats[metric] = {
+                    'mean': values.mean(),
+                    'std': values.std(),
+                    'ci_lower': values.mean() - 1.96 * values.std() / np.sqrt(len(values)),
+                    'ci_upper': values.mean() + 1.96 * values.std() / np.sqrt(len(values)),
+                    'median': np.median(values),
+                    'iqr': np.percentile(values, 75) - np.percentile(values, 25),
+                    'min': values.min(),
+                    'max': values.max()
+                }
+    
+    # After calculating the statistics, compute the CAGR-to-MDD ratio if available
+    if 'cagr' in stats and 'max_drawdown' in stats:
+        stats['cagr_mdd_ratio'] = {
+            'mean': stats['cagr']['gmean'] / stats['max_drawdown']['mean'] if stats['max_drawdown']['mean'] != 0 else np.nan,
+            'median': stats['cagr']['median'] / stats['max_drawdown']['median'] if stats['max_drawdown']['median'] != 0 else np.nan
+        }
     
     return stats
 
 def run_train_test_analysis(symbol, start_date, end_date, strategy_class, timeframes,
                            train_length_days, test_length_days, param_ranges,
-                           n_samples=30, n_trials=20, gap_days=0, starting_cash=100000, 
+                           n_samples=10, n_trials=10, gap_days=2, starting_cash=100000, 
                            commission=0.001, limit=10000):
     """Run walk-forward optimization and out-of-sample testing with random search"""
     
@@ -219,7 +257,7 @@ def run_train_test_analysis(symbol, start_date, end_date, strategy_class, timefr
     sampled_starts = sorted(pd.Timestamp(d) for d in 
                           np.random.choice(date_range, size=n_samples, replace=True))
     
-    results = []
+    test_results = []
     
     for idx, sample_start in enumerate(sampled_starts):
         try:
@@ -243,6 +281,9 @@ def run_train_test_analysis(symbol, start_date, end_date, strategy_class, timefr
                                     end_date=test_end.strftime('%Y-%m-%d'),
                                     limit=limit)
                     for tf in timeframes]
+            
+            train_dfs = align_data_periods(train_dfs)
+            test_dfs = align_data_periods(test_dfs)
             
             # Optimize on training data
             _, best_params = optimize_strategy_random(
@@ -274,7 +315,7 @@ def run_train_test_analysis(symbol, start_date, end_date, strategy_class, timefr
                 'optimized_params': best_params
             })
             
-            results.append(test_result)
+            test_results.append(test_result)
             print(f"Completed train-test cycle starting at {train_start.strftime('%Y-%m-%d')}")
             print("*" * 47)
             
@@ -282,29 +323,42 @@ def run_train_test_analysis(symbol, start_date, end_date, strategy_class, timefr
             print(f"Error in train-test cycle: {type(e).__name__}: {str(e)}")
             print("*" * 47)
     
-    df_results = pd.DataFrame(results)
-    stats = calculate_stability_stats(df_results)
+    df_test_results = pd.DataFrame(test_results)
+    stats = calculate_stability_stats(df_test_results)
     
-    return df_results, stats
+    return df_test_results, stats
 
 def print_stability_stats(stability_stats):
     # Define which metrics are percentages
     pct_metrics = {'total_return', 'cagr', 'max_drawdown'}
-    
+
     for metric, stat in stability_stats.items():
         print(f"\n{metric.upper()}:")
-        if metric in pct_metrics:
+
+        # Handle metrics like total_return and cagr which involve geometric mean
+        if metric in ['total_return', 'cagr']:
+            print(f"Geometric Mean: {stat['gmean']:.2%}")
             print(f"Mean: {stat['mean']:.2%}")
+            print(f"Std Dev: {stat['std']:.2%}")
             print(f"95% CI: [{stat['ci_lower']:.2%}, {stat['ci_upper']:.2%}]")
+            print(f"Median: {stat['median']:.2%}")
+            print(f"IQR: {stat['iqr']:.2%}")
             print(f"Min: {stat['min']:.2%}")
             print(f"Max: {stat['max']:.2%}")
-            print(f"Std Dev: {stat['std']:.2%}")
+        # Special handling for cagr_mdd_ratio if it exists
+        elif metric == 'cagr_mdd_ratio':
+            print(f"Mean: {stat['mean']:.2f}")
+            print(f"Median: {stat['median']:.2f}")
+        # Handle other metrics like max_drawdown, n_trades, win_trades, loss_trades
         else:
             print(f"Mean: {stat['mean']:.2f}")
+            print(f"Std Dev: {stat['std']:.2f}")
             print(f"95% CI: [{stat['ci_lower']:.2f}, {stat['ci_upper']:.2f}]")
+            print(f"Median: {stat['median']:.2f}")
+            print(f"IQR: {stat['iqr']:.2f}")
             print(f"Min: {stat['min']:.2f}")
             print(f"Max: {stat['max']:.2f}")
-            print(f"Std Dev: {stat['std']:.2f}")
+
 
 def analyze_test_results(df_results):
     """

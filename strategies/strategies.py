@@ -17,7 +17,7 @@ class BuyHold(bt.Strategy):
         self.max_value = self.start_value
         self.max_drawdown = 0
         self.total_return = 0
-        self.ret_mdd_ratio = 0
+        self.cagr_mdd_ratio = 0
         self.cagr = 0
         self.start_date = None
 
@@ -79,9 +79,9 @@ class BuyHold(bt.Strategy):
 
         # Update risk-adjusted-return
         if self.max_drawdown != 0:
-            self.ret_mdd_ratio = self.total_return / self.max_drawdown
+            self.cagr_mdd_ratio = self.cagr / self.max_drawdown
         else:
-            self.ret_mdd_ratio = 0
+            self.cagr_mdd_ratio = 0
 
         # Update CAGR
         years = (current_date - self.start_date).days / 365.25
@@ -127,7 +127,7 @@ class SmaSimpleCrossL(bt.Strategy):
         self.max_value = self.start_value
         self.max_drawdown = 0
         self.total_return = 0
-        self.ret_mdd_ratio = 0
+        self.cagr_mdd_ratio = 0
         self.cagr = 0
         self.start_date = None
 
@@ -184,9 +184,9 @@ class SmaSimpleCrossL(bt.Strategy):
 
         # Update risk-adjusted-return
         if self.max_drawdown != 0:
-            self.ret_mdd_ratio = self.total_return / self.max_drawdown
+            self.cagr_mdd_ratio = self.cagr / self.max_drawdown
         else:
-            self.ret_mdd_ratio = 0
+            self.cagr_mdd_ratio = 0
 
         # Update CAGR
         years = (current_date - self.start_date).days / 365.25
@@ -264,7 +264,7 @@ class SmaConfCrossLS(bt.Strategy):
         self.max_value = self.start_value
         self.max_drawdown = 0
         self.total_return = 0
-        self.ret_mdd_ratio = 0
+        self.cagr_mdd_ratio = 0
         self.cagr = 0
         self.start_date = None
         
@@ -342,9 +342,9 @@ class SmaConfCrossLS(bt.Strategy):
 
         # Update risk-adjusted-return
         if self.max_drawdown != 0:
-            self.ret_mdd_ratio = self.total_return / self.max_drawdown
+            self.cagr_mdd_ratio = self.cagr / self.max_drawdown
         else:
-            self.ret_mdd_ratio = 0
+            self.cagr_mdd_ratio = 0
         
         # Update CAGR
         years = (current_date - self.start_date).days / 365.25
@@ -440,7 +440,7 @@ class RSIBBStrategy(bt.Strategy):
         self.max_value = self.start_value
         self.max_drawdown = 0
         self.total_return = 0
-        self.ret_mdd_ratio = 0
+        self.cagr_mdd_ratio = 0
         self.cagr = 0
         self.start_date = None
         
@@ -497,9 +497,9 @@ class RSIBBStrategy(bt.Strategy):
         
         # Update risk-adjusted-return
         if self.max_drawdown != 0:
-            self.ret_mdd_ratio = self.total_return / self.max_drawdown
+            self.cagr_mdd_ratio = self.cagr / self.max_drawdown
         else:
-            self.ret_mdd_ratio = 0
+            self.cagr_mdd_ratio = 0
         
         # Update CAGR
         years = (current_date - self.start_date).days / 365.25
