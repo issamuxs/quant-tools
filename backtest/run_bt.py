@@ -131,7 +131,7 @@ def optimize_strategy_random(strategy_class, df_list, param_ranges, starting_cas
     best_params = {col: results_df.loc[best_idx, col] 
                     for col in param_ranges.keys()}
    
-    print(f"\nBest parameters found for Return/drawdown: {best_params}")
+    print(f"\nBest parameters found: {best_params}")
     print(f"Return: {results_df.loc[best_idx, 'total_return']:.2%}")
     print(f"CAGR: {results_df.loc[best_idx, 'cagr']:.2%}")
     print(f"MDD: {results_df.loc[best_idx, 'max_drawdown']:.2%}")
@@ -256,7 +256,7 @@ def run_train_test_analysis(symbol, start_date, end_date, strategy_class, timefr
             )
                         
             # Test on out-of-sample data
-            print("\nRunning backtest on out-of-sample data...")
+            print("\nRunning backtest on out-of-sample data with sample best parameters...")
             test_result = execute_backtest(
                 strategy_class=strategy_class,
                 df_list=test_dfs,
