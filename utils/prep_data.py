@@ -11,13 +11,6 @@ def align_data_periods(df_list):
     # Create new list with aligned dataframes
     aligned_df_list = [df.loc[common_start:common_end].copy() for df in df_list]
     
-    # Print aligned periods
-    print("\nAligned Backtest Period:")
-    print(f"Start: {common_start.strftime('%Y-%m-%d')}")
-    print(f"End: {common_end.strftime('%Y-%m-%d')}")
-    print(f"Total Days: {(common_end - common_start).days}")
-    print(f"\nCandles per DataFrame: {[len(df) for df in aligned_df_list]}")
-    
     return aligned_df_list
 
 def format_data_cerebro(df_list):

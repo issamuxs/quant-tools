@@ -95,18 +95,29 @@ class BuyHold(bt.Strategy):
 
 
 class SmaSimpleCrossL(bt.Strategy):
-
     params = dict(
         pfast=10,  
         pslow=30,  
-        risk_perc=0.99  
+        risk_perc=0.99,
+        atr_period=14,
+        sl_coef=1,
+        tp_coef=1
     )
 
     def __init__(self):
-
-        #Initialize trade size 
+        #Initialize trade size and price tracking
         self.trade_size = None
+        self.entry_price = None
         
+        # Initialize ATR-based stops
+        self.data.atr = bt.indicators.ATR(
+            self.data,
+            period=self.p.atr_period
+        )
+        self.sl_atr = None
+        self.tp_atr = None
+        
+        # SMA indicators
         self.sma1 = bt.ind.SMA(self.data.open, period=self.p.pfast)
         self.sma2 = bt.ind.SMA(self.data.open, period=self.p.pslow)
         self.crossover = bt.ind.CrossOver(self.sma1, self.sma2)
@@ -147,6 +158,9 @@ class SmaSimpleCrossL(bt.Strategy):
             
             # Track returns
             self.returns.append(trade_return)
+            
+            # Reset trade size
+            self.trade_size = None
 
     def next(self):
         # Update dates and values
@@ -155,6 +169,10 @@ class SmaSimpleCrossL(bt.Strategy):
 
         current_value = self.broker.getvalue()
         current_date = self.data.datetime.datetime(0)
+        
+        # Update ATR values
+        self.sl_atr = self.p.sl_coef*self.data.atr[-1]
+        self.tp_atr = self.p.tp_coef*self.data.atr[-1]
 
         # Update metrics on each candle
         self.max_value = max(self.max_value, current_value)
@@ -175,24 +193,36 @@ class SmaSimpleCrossL(bt.Strategy):
         if years > 0:  # Avoid division by zero
             self.cagr = (current_value / self.start_value) ** (1/years) - 1
 
+        current_price = self.data.open[0]
+
         # Trading logic
         if not self.position:  
             if self.crossover > 0:  
                 size = (self.broker.getcash() * self.p.risk_perc) / self.data.open[0]
                 self.trade_size = size
-                self.buy(size=size)  
-        elif self.crossover < 0:  
-            self.close()
+                self.buy(size=size)
+                self.entry_price = current_price
+                self.stop_loss_price = self.entry_price - self.sl_atr
+                self.take_profit_price = self.entry_price + self.tp_atr
+        else:
+            if (current_price <= self.stop_loss_price) or \
+               (current_price >= self.take_profit_price) or \
+               (self.crossover < 0):  
+                self.close()
 
 
 class SmaConfCrossLS(bt.Strategy):
     params = dict(
-        stf_pfast=20,  
-        stf_pslow=200, 
-        ltf_pfast=7,  
-        ltf_pslow=21, 
+        stf_pfast=10,  
+        stf_pslow=30, 
+        ltf_pfast=20,  
+        ltf_pslow=50, 
+        last_to_avg_volume_ratio=1.2,
+        vol_delta_lb=0.2,
         risk_perc=0.99,
-        stop_loss_perc=0.01
+        atr_period=14,
+        sl_coef = 1,
+        tp_coef = 1
     )
 
     def __init__(self):
@@ -200,13 +230,20 @@ class SmaConfCrossLS(bt.Strategy):
         #Initialize trade size 
         self.trade_size = None  
         
-        # Initialize variables for tracking entry prices and stop losses
+        # Initialize variables for tracking entry prices
         self.entry_price = None
-        self.stop_loss_price = None
         
         # Get both timeframes (STF = Short TimeFrame, LTF = Long TimeFrame)
         self.data_stf = self.datas[0]
         self.data_ltf = self.datas[1]
+
+        # Initialize variables for stop losses and take profits
+        self.data_stf.atr = bt.indicators.ATR(
+            self.data_stf,
+            period=self.p.atr_period
+        )
+        self.sl_atr = None
+        self.tp_atr = None
         
         # Calculate SMAs for both timeframes
         self.sma1_stf = bt.ind.SMA(self.data_stf.open, period=self.p.stf_pfast)
@@ -235,7 +272,7 @@ class SmaConfCrossLS(bt.Strategy):
         self.trade_list = []
         self.returns = []
 
-    def volume_confirmation(self, last_to_avg_volume_ratio=1.2, vol_delta_lb=0.2):
+    def volume_confirmation(self):
         # Current volume metrics
         last_volume = self.data_stf.volume[-1]
         avg_volume = self.vol_sma[0]
@@ -243,8 +280,8 @@ class SmaConfCrossLS(bt.Strategy):
         price_change = self.price_change[0]
         
         # Volume conditions
-        above_average = last_volume > avg_volume * last_to_avg_volume_ratio 
-        strong_momentum = vol_delta > vol_delta_lb  
+        above_average = last_volume > avg_volume * self.p.last_to_avg_volume_ratio 
+        strong_momentum = vol_delta > self.p.vol_delta_lb  
         price_aligned = (price_change > 0 and self.crossover_stf > 0) or \
                         (price_change < 0 and self.crossover_stf < 0)
         
@@ -291,7 +328,10 @@ class SmaConfCrossLS(bt.Strategy):
         
         current_value = self.broker.getvalue()
         current_date = self.data_stf.datetime.datetime(0)
-        
+
+        self.sl_atr = self.p.sl_coef*self.data_stf.atr[-1]
+        self.tp_atr = self.p.tp_coef*self.data_stf.atr[-1]
+                
         # Update metrics on each candle
         self.max_value = max(self.max_value, current_value)
         self.total_return = (current_value - self.start_value) / self.start_value
@@ -327,26 +367,185 @@ class SmaConfCrossLS(bt.Strategy):
                     self.trade_size = size
                     self.buy(size=size)
                     self.entry_price = current_price
-                    self.stop_loss_price = self.entry_price * (1 - self.p.stop_loss_perc)  # Set stop loss
+                    self.stop_loss_price = self.entry_price - self.sl_atr
+                    self.take_profit_price = self.entry_price + self.tp_atr
 
                 # Short signal: STF crossover and LTF trend down
                 elif (self.crossover_stf < 0 and 
                         self.sma1_ltf < self.sma2_ltf and 
-                        current_price < self.sma1_ltf and
+                        current_price < self.sma1_ltf and 
                         vol_confirmed):
                     size = (self.broker.getcash() * self.p.risk_perc) / self.data_stf.open[0]
                     self.trade_size = -size
                     self.sell(size=size)
                     self.entry_price = current_price
-                    self.stop_loss_price = self.entry_price * (1 + self.p.stop_loss_perc)  # Set stop loss for short
-
+                    self.stop_loss_price = self.entry_price + self.sl_atr
+                    self.take_profit_price = self.entry_price - self.tp_atr
             else:
                 # Close long if STF crosses down or LTF trend changes
                 if self.trade_size > 0:
-                    if current_price <= self.stop_loss_price or (self.crossover_stf < 0 or self.sma1_ltf < self.sma2_ltf or current_price < self.sma1_ltf):
+                    if (current_price <= self.stop_loss_price) or (current_price >= self.take_profit_price) or (self.crossover_stf < 0 or self.sma1_ltf < self.sma2_ltf or current_price < self.sma1_ltf):
                         self.close()
 
                 # Close short if STF crosses up or LTF trend changes
                 elif self.trade_size < 0:
-                    if current_price >= self.stop_loss_price or (self.crossover_stf > 0 or self.sma1_ltf > self.sma2_ltf or current_price > self.sma1_ltf):
+                    if (current_price >= self.stop_loss_price) or (current_price <= self.take_profit_price) or (self.crossover_stf > 0 or self.sma1_ltf > self.sma2_ltf or current_price > self.sma1_ltf):
                         self.close()
+
+class RSIBBStrategy(bt.Strategy):
+    params = dict(
+        rsi_period=14,
+        bb_period=30,
+        bb_devfactor=2,
+        rsi_threshold_low=30,
+        rsi_threshold_high=70,
+        bb_width_threshold=0.1,
+        risk_perc=0.99,
+        atr_period=14,
+        sl_coef=1,
+        tp_coef=1
+    )
+
+    def __init__(self):
+        # Initialize trade tracking
+        self.trade_size = None
+        self.entry_price = None
+        
+        # Initialize ATR-based stops
+        self.data.atr = bt.indicators.ATR(
+            self.data,
+            period=self.p.atr_period
+        )
+        self.sl_atr = None
+        self.tp_atr = None
+        
+        # Calculate RSI
+        self.rsi = bt.indicators.RSI(
+            self.data.close, 
+            period=self.params.rsi_period
+        )
+        
+        # Calculate Bollinger Bands
+        self.bb = bt.indicators.BollingerBands(
+            self.data.close, 
+            period=self.params.bb_period,
+            devfactor=self.params.bb_devfactor
+        )
+        
+        # Calculate BB Width
+        self.bb_width = (self.bb.lines.top - self.bb.lines.bot) / self.bb.lines.mid
+        
+        # Track performance metrics
+        self.start_value = self.broker.getvalue()
+        self.max_value = self.start_value
+        self.max_drawdown = 0
+        self.total_return = 0
+        self.ret_mdd_ratio = 0
+        self.cagr = 0
+        self.start_date = None
+        
+        # Track trades and returns
+        self.trade_list = []
+        self.returns = []
+
+    def notify_trade(self, trade):
+        if trade.isclosed:
+            entry_price = trade.price
+            exit_price = self.data.open[0]
+            
+            position_type = 'Long' if self.trade_size > 0 else 'Short'
+            
+            if self.trade_size >= 0:  # Long position
+                trade_return = (exit_price - entry_price) / entry_price if entry_price != 0 else 0
+            else:  # Short position
+                trade_return = (entry_price - exit_price) / entry_price if entry_price != 0 else 0
+            
+            self.trade_list.append({
+                'position_type': position_type,
+                'trade_size': self.trade_size,
+                'entry_date': self.data.datetime.datetime(-trade.barlen),
+                'exit_date': self.data.datetime.datetime(0),
+                'duration': trade.barlen,
+                'entry_price': entry_price,
+                'exit_price': exit_price,
+                'pnl': trade.pnl,
+                'return': trade_return
+            })
+            
+            self.returns.append(trade_return)
+            self.trade_size = None
+
+    def next(self):
+        # Update dates and values
+        if self.start_date is None:
+            self.start_date = self.data.datetime.datetime(0)
+        
+        current_value = self.broker.getvalue()
+        current_date = self.data.datetime.datetime(0)
+
+        # Update ATR values
+        self.sl_atr = self.p.sl_coef*self.data.atr[-1]
+        self.tp_atr = self.p.tp_coef*self.data.atr[-1]
+        
+        # Update metrics
+        self.max_value = max(self.max_value, current_value)
+        self.total_return = (current_value - self.start_value) / self.start_value
+        
+        # Update drawdown
+        drawdown = (self.max_value - current_value) / self.max_value
+        self.max_drawdown = max(self.max_drawdown, drawdown)
+        
+        # Update risk-adjusted-return
+        if self.max_drawdown != 0:
+            self.ret_mdd_ratio = self.total_return / self.max_drawdown
+        else:
+            self.ret_mdd_ratio = 0
+        
+        # Update CAGR
+        years = (current_date - self.start_date).days / 365.25
+        if years > 0:
+            self.cagr = (current_value / self.start_value) ** (1/years) - 1
+
+        current_price = self.data.open[0]
+
+        if not self.position:
+            # BUY Signal
+            if (self.data.close[-2] < self.bb.lines.bot[-2] and
+                self.rsi[-2] < self.params.rsi_threshold_low and
+                self.data.close[-1] > self.data.high[-2] and
+                self.bb_width[-1] > self.params.bb_width_threshold):
+                
+                size = (self.broker.getcash() * self.p.risk_perc) / self.data.open[0]
+                self.trade_size = size
+                self.buy(size=size)
+                self.entry_price = current_price
+                self.stop_loss_price = self.entry_price - self.sl_atr
+                self.take_profit_price = self.entry_price + self.tp_atr
+
+            # SELL Signal
+            elif (self.data.close[-2] > self.bb.lines.top[-2] and
+                  self.rsi[-2] > self.params.rsi_threshold_high and
+                  self.data.close[-1] < self.data.low[-2] and
+                  self.bb_width[-1] > self.params.bb_width_threshold):
+                
+                size = (self.broker.getcash() * self.p.risk_perc) / self.data.open[0]
+                self.trade_size = -size
+                self.sell(size=size)
+                self.entry_price = current_price
+                self.stop_loss_price = self.entry_price + self.sl_atr
+                self.take_profit_price = self.entry_price - self.tp_atr
+
+        else:
+            # Exit long position
+            if self.trade_size > 0:
+                if (current_price <= self.stop_loss_price) or \
+                   (current_price >= self.take_profit_price) or \
+                   (self.rsi[-1] > self.params.rsi_threshold_high):
+                    self.close()
+
+            # Exit short position
+            elif self.trade_size < 0:
+                if (current_price >= self.stop_loss_price) or \
+                   (current_price <= self.take_profit_price) or \
+                   (self.rsi[-1] < self.params.rsi_threshold_low):
+                    self.close()
