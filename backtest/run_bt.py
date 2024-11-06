@@ -115,14 +115,10 @@ def optimize_strategy_random(strategy_class, df_list, param_ranges, starting_cas
             results.append(result)
             
         except Exception as e:
-            print(f"Error in trial {trial + 1}: {str(e)}")
+            print(f"Error in trial {trial + 1}: {type(e).__name__}: {str(e)}")
             continue
    
     if not results:
-        print("Debug info:")
-        print(f"Parameter ranges: {param_ranges}")
-        print(f"Data shapes: {[df.shape for df in df_list]}")
-        print(f"Data index range: {df_list[0].index[0]} to {df_list[0].index[-1]}")
         raise ValueError("No successful optimization trials")
    
     # Convert to DataFrame and find best parameters
@@ -345,11 +341,20 @@ def print_stability_stats(stability_stats):
             print(f"IQR: {stat['iqr']:.2%}")
             print(f"Min: {stat['min']:.2%}")
             print(f"Max: {stat['max']:.2%}")
-        # Special handling for cagr_mdd_ratio if it exists
+        # Special handling for max_drawdown
+        elif metric == 'max_drawdown':
+            print(f"Mean: {stat['mean']:.2%}")
+            print(f"Std Dev: {stat['std']:.2%}")
+            print(f"95% CI: [{stat['ci_lower']:.2%}, {stat['ci_upper']:.2%}]")
+            print(f"Median: {stat['median']:.2%}")
+            print(f"IQR: {stat['iqr']:.2%}")
+            print(f"Min: {stat['min']:.2%}")
+            print(f"Max: {stat['max']:.2%}")
+        # Special handling for cagr_mdd_ratio
         elif metric == 'cagr_mdd_ratio':
             print(f"Mean: {stat['mean']:.2f}")
             print(f"Median: {stat['median']:.2f}")
-        # Handle other metrics like max_drawdown, n_trades, win_trades, loss_trades
+        # Handle other metrics like n_trades, win_trades, loss_trades
         else:
             print(f"Mean: {stat['mean']:.2f}")
             print(f"Std Dev: {stat['std']:.2f}")
