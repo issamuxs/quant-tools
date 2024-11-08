@@ -4,9 +4,9 @@ import numpy as np
 from datetime import datetime
 import itertools
 from utils.fetch_data import fetch_crypto_data
-from utils.prep_data import align_data_periods, format_data_cerebro
+from utils.prep_data import align_data_periods, format_data_cerebro, lookback_test_data
 
-def execute_backtest(strategy_class, df_list, strategy_params, starting_cash, commission):
+def execute_backtest(strategy_class, df_list, lookback_reset_idx, strategy_params, starting_cash, commission):
     """
     Core backtest execution function with prepared data
     """
@@ -17,6 +17,9 @@ def execute_backtest(strategy_class, df_list, strategy_params, starting_cash, co
     for data in data_list:
         cerebro.adddata(data)
     
+    # Add test_start_idx to strategy parameters
+    strategy_params['lookback_reset_idx']=lookback_reset_idx
+
     # Setup strategy and broker
     cerebro.addstrategy(strategy_class, **strategy_params)
     cerebro.broker.setcash(starting_cash)
@@ -29,16 +32,18 @@ def execute_backtest(strategy_class, df_list, strategy_params, starting_cash, co
     strategy = results[0]
     trades = strategy.analyzers.trades.get_analysis()
 
-    # Log print
-    print(f"Start date: {df_list[0].index[0]}")
+    # Log print including lookback info
+    print("*"*47)
+    print(f"Start date with lookback: {df_list[0].index[0]}")
+    print(f"Start date w/o lookback: {df_list[0].index[lookback_reset_idx]}")
+    print(f"Start date of trade logs: {strategy.start_date}")
     print(f"End date: {df_list[0].index[-1]}")
-    print(f"Duration days: {(df_list[0].index[-1] - df_list[0].index[0]).days}")
+    print("*"*47)
     print(f"Total return: {strategy.total_return:.2%}")
     print(f"CAGR: {strategy.cagr:.2%}")
     print(f"MDD: {strategy.max_drawdown:.2%}")
     print(f"CAGR/MDD: {strategy.cagr_mdd_ratio:.2f}")
-
-
+    print("*"*47)
 
     return {
         'total_return': strategy.total_return,
@@ -48,36 +53,13 @@ def execute_backtest(strategy_class, df_list, strategy_params, starting_cash, co
         'n_trades': trades.total.total if hasattr(trades, 'total') else 0,
         'win_trades': trades.won.total if hasattr(trades, 'won') else 0,
         'loss_trades': trades.lost.total if hasattr(trades, 'lost') else 0,
-        'start_date': df_list[0].index[0].strftime('%Y-%m-%d'),
-        'end_date': df_list[0].index[-1].strftime('%Y-%m-%d')
+        'lookback_start': df_list[0].index[0].strftime('%Y-%m-%d'),
+        'test_start': df_list[0].index[lookback_reset_idx].strftime('%Y-%m-%d'),
+        'test_end': df_list[0].index[-1].strftime('%Y-%m-%d')
     }
 
-def run_backtest(symbol, start_date, strategy_class, timeframes, period_length_days, 
-                starting_cash, commission, limit, **strategy_params):  
-    """
-    Run backtest with data fetching and preparation
-    """
-    # Calculate end date
-    start = pd.Timestamp(start_date)
-    end = start + pd.Timedelta(days=period_length_days)
-    end_date = end.strftime('%Y-%m-%d')
-    
-    # Fetch and prepare data
-    df_list = [fetch_crypto_data(symbol=symbol, timeframe=tf, 
-                               start_date=start_date, end_date=end_date,
-                               limit=limit) 
-               for tf in timeframes]
-    df_list = align_data_periods(df_list)
-    
-    return execute_backtest(
-        strategy_class=strategy_class,
-        df_list=df_list,
-        strategy_params=strategy_params,  # Pass the strategy parameters
-        starting_cash=starting_cash,
-        commission=commission
-    )
 
-def optimize_strategy_random(strategy_class, df_list, param_ranges, starting_cash, commission, 
+def optimize_strategy_random(strategy_class, df_list, lookback_reset_idx, param_ranges, starting_cash, commission, 
                           n_trials, random_state):
     """
     Optimize strategy parameters using random search
@@ -105,6 +87,7 @@ def optimize_strategy_random(strategy_class, df_list, param_ranges, starting_cas
             result = execute_backtest(
                 strategy_class=strategy_class,
                 df_list=df_list,
+                lookback_reset_idx=lookback_reset_idx,
                 strategy_params=params,
                 starting_cash=starting_cash,
                 commission=commission
@@ -127,12 +110,15 @@ def optimize_strategy_random(strategy_class, df_list, param_ranges, starting_cas
     best_params = {col: results_df.loc[best_idx, col] 
                     for col in param_ranges.keys()}
    
-    print(f"\nBest parameters found: {best_params}")
+    print("\nBest parameters found:")
+    print("*"*47)
+    print(f"{best_params}")
+    print("*"*47)
     print(f"Return: {results_df.loc[best_idx, 'total_return']:.2%}")
     print(f"CAGR: {results_df.loc[best_idx, 'cagr']:.2%}")
     print(f"MDD: {results_df.loc[best_idx, 'max_drawdown']:.2%}")
     print(f"CAGR/MDD: {results_df.loc[best_idx, 'cagr_mdd_ratio']:.2f}")
-
+    print("*"*47)
    
     return results_df, best_params
 
@@ -231,7 +217,7 @@ def calculate_stability_stats(df_results):
 
 def run_train_test_analysis(symbol, start_date, end_date, strategy_class, timeframes,
                            train_length_days, test_length_days, param_ranges,
-                           n_samples=10, n_trials=10, gap_days=2, starting_cash=100000, 
+                           n_samples=10, n_trials=10, gap_days=2, lookback_period_days=None, starting_cash=100000, 
                            commission=0.001, limit=10000):
     """Run walk-forward optimization and out-of-sample testing with random search"""
     
@@ -263,9 +249,8 @@ def run_train_test_analysis(symbol, start_date, end_date, strategy_class, timefr
             test_start = train_end + pd.Timedelta(days=gap_days)
             test_end = test_start + pd.Timedelta(days=test_length_days)
             
-            print(f"\nGlobal period: {global_start.strftime('%Y-%m-%d')} to {global_end.strftime('%Y-%m-%d')}")
-            print(f"Train period sample: {train_start.strftime('%Y-%m-%d')} to {train_end.strftime('%Y-%m-%d')}")
-            print(f"Test period sample:  {test_start.strftime('%Y-%m-%d')} to {test_end.strftime('%Y-%m-%d')}")
+            print("*"*94)
+            print(f"Global period: {global_start.strftime('%Y-%m-%d')} to {global_end.strftime('%Y-%m-%d')}")
             
             # Fetch training and testing data
             train_dfs = [fetch_crypto_data(symbol=symbol, timeframe=tf, 
@@ -278,13 +263,28 @@ def run_train_test_analysis(symbol, start_date, end_date, strategy_class, timefr
                                     limit=limit)
                     for tf in timeframes]
             
-            train_dfs = align_data_periods(train_dfs)
-            test_dfs = align_data_periods(test_dfs)
+            common_train_start, common_train_end, train_dfs = align_data_periods(train_dfs)
+            common_test_start, common_test_end, test_dfs = align_data_periods(test_dfs)
+            print("*"*47)
+            print(f"Aligned train period sample: {common_train_start.strftime('%Y-%m-%d')} to {common_train_end.strftime('%Y-%m-%d')}")
+            print(f"Aligned test period sample:  {common_test_start.strftime('%Y-%m-%d')} to {common_test_end.strftime('%Y-%m-%d')}")
+            print("*"*47)
+
+            # Determine maximum lookback needed
+
+            test_dfs_with_lookback = [lookback_test_data(train_df=train_dfs[i],
+                                                    test_df=test_dfs[i],
+                                                    lookback_period_days=lookback_period_days) for i, tf in enumerate(timeframes)
+                                                    if not print(f"Processing timeframe: {tf}")]
+            
+            test_dfs = [df_tuple[0] for df_tuple in test_dfs_with_lookback]
+            lookback_reset_idx = test_dfs_with_lookback[0][1] # Same lookback period for all test samples
             
             # Optimize on training data
             _, best_params = optimize_strategy_random(
                 strategy_class=strategy_class,
                 df_list=train_dfs,
+                lookback_reset_idx=0, # No need for lookback on train periods
                 param_ranges=param_ranges,
                 starting_cash=starting_cash,
                 commission=commission,
@@ -297,27 +297,23 @@ def run_train_test_analysis(symbol, start_date, end_date, strategy_class, timefr
             test_result = execute_backtest(
                 strategy_class=strategy_class,
                 df_list=test_dfs,
+                lookback_reset_idx=lookback_reset_idx,
                 strategy_params=best_params,
                 starting_cash=starting_cash,
                 commission=commission
             )
             
             test_result.update({
-                'sample_start': train_start.strftime('%Y-%m-%d'),
-                'train_start': train_start.strftime('%Y-%m-%d'),
-                'train_end': train_end.strftime('%Y-%m-%d'),
-                'test_start': test_start.strftime('%Y-%m-%d'),
-                'test_end': test_end.strftime('%Y-%m-%d'),
                 'optimized_params': best_params
             })
             
             test_results.append(test_result)
             print(f"Completed train-test cycle starting at {train_start.strftime('%Y-%m-%d')}")
-            print("*" * 47)
+            print("*"*94)
             
         except Exception as e:
             print(f"Error in train-test cycle: {type(e).__name__}: {str(e)}")
-            print("*" * 47)
+            print("*"*47)
     
     df_test_results = pd.DataFrame(test_results)
     stats = calculate_stability_stats(df_test_results)

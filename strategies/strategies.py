@@ -217,6 +217,7 @@ class SmaConfCrossLS(bt.Strategy):
         stf_pslow=30, 
         ltf_pfast=20,  
         ltf_pslow=50, 
+        lookback_reset_idx=0,
         last_to_avg_volume_ratio=1.2,
         vol_delta_lb=0.2,
         risk_perc=0.99,
@@ -240,8 +241,7 @@ class SmaConfCrossLS(bt.Strategy):
         # Initialize variables for stop losses and take profits
         self.data_stf.atr = bt.indicators.ATR(
             self.data_stf,
-            period=self.p.atr_period
-        )
+            period=self.p.atr_period)
         self.sl_atr = None
         self.tp_atr = None
         
@@ -259,7 +259,8 @@ class SmaConfCrossLS(bt.Strategy):
         self.price_change = self.data_stf.open - self.data_stf.close(-1)
         self.vol_delta = (self.data_stf.volume(-1) - self.vol_sma) / self.vol_std
         
-        # Track performance metrics
+        # Initialize performance tracking immediately for training
+        # Will be reset at test_start_idx for testing
         self.start_value = self.broker.getvalue()
         self.max_value = self.start_value
         self.max_drawdown = 0
@@ -289,39 +290,53 @@ class SmaConfCrossLS(bt.Strategy):
         
     def notify_trade(self, trade):
         if trade.isclosed:
-            entry_price = trade.price
-            exit_price = self.data_stf.open[0] # Approximation that might have strong impact on performance
-            
-            # Determine if the trade was long or short based on trade.size
-            position_type = 'Long' if self.trade_size > 0 else 'Short'
-            
-            # Calculate PnL and return based on trade direction
-            if self.trade_size >= 0:  # Long position
-                trade_return = (exit_price - entry_price) / entry_price if entry_price != 0 else 0
-            else:  # Short position
-                trade_return = (entry_price - exit_price) / entry_price if entry_price != 0 else 0
-            
-            # Store trade information
-            self.trade_list.append({
-                'position_type': position_type,
-                'trade_size': self.trade_size,
-                'entry_date': self.data_stf.datetime.datetime(-trade.barlen),
-                'exit_date': self.data_stf.datetime.datetime(0),
-                'duration': trade.barlen,
-                'entry_price': entry_price,
-                'exit_price': exit_price,
-                'pnl': trade.pnl,
-                'return': trade_return
-            })
-            
-            # Track returns
-            self.returns.append(trade_return)
+            if (self.p.lookback_reset_idx == 0 or len(self) >= self.p.lookback_reset_idx): # If training or past lookback period
+                entry_price = trade.price
+                exit_price = self.data_stf.open[0] # Approximation that might have strong impact on performance
+                
+                # Determine if the trade was long or short based on trade.size
+                position_type = 'Long' if self.trade_size > 0 else 'Short'
+                
+                # Calculate PnL and return based on trade direction
+                if self.trade_size >= 0:  # Long position
+                    trade_return = (exit_price - entry_price) / entry_price if entry_price != 0 else 0
+                else:  # Short position
+                    trade_return = (entry_price - exit_price) / entry_price if entry_price != 0 else 0
+                
+                # Store trade information
+                self.trade_list.append({
+                    'position_type': position_type,
+                    'trade_size': self.trade_size,
+                    'entry_date': self.data_stf.datetime.datetime(-trade.barlen),
+                    'exit_date': self.data_stf.datetime.datetime(0),
+                    'duration': trade.barlen,
+                    'entry_price': entry_price,
+                    'exit_price': exit_price,
+                    'pnl': trade.pnl,
+                    'return': trade_return
+                })
+                
+                # Track returns
+                self.returns.append(trade_return)
 
-            # Reset the trade size
-            self.trade_size = None
+                # Reset the trade size
+                self.trade_size = None
 
 
     def next(self):
+
+        # For test dataset, reset metrics at test_start_idx
+        if self.p.lookback_reset_idx != 0 and len(self) == self.p.lookback_reset_idx:
+            self.start_value = self.broker.getvalue()
+            self.max_value = self.start_value
+            self.max_drawdown = 0
+            self.total_return = 0
+            self.cagr_mdd_ratio = 0
+            self.cagr = 0
+            self.start_date = self.data_stf.datetime.datetime(0)
+            self.trade_list = []
+            self.returns = []
+
         # Update dates and values
         if self.start_date is None:
             self.start_date = self.data_stf.datetime.datetime(0)
