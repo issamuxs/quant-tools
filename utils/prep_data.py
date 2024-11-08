@@ -2,7 +2,10 @@ import backtrader as bt
 import pandas as pd
 
 def align_data_periods(df_list):
-    if not df_list:  # Check if list is empty
+    """
+    Align data periods for multiple timeframes, ensuring proper overlap
+    """
+    if not df_list:
         raise ValueError("DataFrame list is empty")
     
     # Find common start and end dates
@@ -33,28 +36,41 @@ def format_data_cerebro(df_list):
 
     return data_df_list
 
-def lookback_test_data(train_df, test_df, lookback_period_days):
+def lookback_test_data(original_train_df, original_test_df, aligned_train_df, aligned_test_df, lookback_period_days):
     """
-    Prepare test data with initialization period using days
-    Returns both full dataframe and index where actual test period starts
+    Prepare test data with initialization period, using both original datasets
     """
+    # Get dates from aligned data
+    aligned_train_end = aligned_train_df.index[-1]
+    aligned_test_start = aligned_test_df.index[0]
+
     # Calculate lookback start date
-    test_start = test_df.index[0]
-    lookback_start = test_start - pd.Timedelta(days=lookback_period_days)
-    
-    # Get lookback data using date range
-    lookback_data = train_df[train_df.index >= lookback_start].copy()
-    
-    # Concatenate with test data
-    full_test_df = pd.concat([lookback_data, test_df])
-    
+    lookback_start = aligned_test_start - pd.Timedelta(days=lookback_period_days)
+
+    # Get lookback data from both original datasets
+    lookback_train = original_train_df[original_train_df.index >= lookback_start].copy()
+    lookback_test = original_test_df[
+        (original_test_df.index >= lookback_start) & 
+        (original_test_df.index < aligned_test_start)
+    ].copy()
+
+    # Combine lookback data from both sources and sort
+    lookback_data = pd.concat([lookback_train, lookback_test]).sort_index()
+    # Remove any duplicates if they exist
+    lookback_data = lookback_data[~lookback_data.index.duplicated(keep='first')]
+
+    # Concatenate lookback and aligned test data
+    full_test_df = pd.concat([lookback_data, aligned_test_df])
+    full_test_df = full_test_df[~full_test_df.index.duplicated(keep='first')].sort_index()
+
     # Mark where actual test period starts
-    lookback_reset_idx = full_test_df.index.get_loc(test_start) + 1
+    lookback_start_idx = len(full_test_df) - len(aligned_test_df)
+
     print("*"*47)
-    print(f"Lookback data from: {lookback_data.index[0]}")
-    print(f"Lookback data to: {lookback_data.index[-1]}")
-    print(f"Test data starts at: {test_start}")
-    print(f"Calculated lookback_reset_idx: {lookback_reset_idx}")
+    print(f"Lookback period needed: {lookback_start} to {aligned_test_start}")
+    print(f"Lookback data collected: {lookback_data.index[0]} to {lookback_data.index[-1]} ({len(lookback_data)} bars)")
+    print(f"Test data period: {aligned_test_df.index[0]} to {aligned_test_df.index[-1]} ({len(aligned_test_df)} bars)")
+    print(f"Reset index at: {lookback_start_idx} bars")
     print("*"*47)
     
-    return full_test_df, lookback_reset_idx
+    return full_test_df, lookback_start_idx

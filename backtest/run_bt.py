@@ -263,8 +263,8 @@ def run_train_test_analysis(symbol, start_date, end_date, strategy_class, timefr
                                     limit=limit)
                     for tf in timeframes]
             
-            common_train_start, common_train_end, train_dfs = align_data_periods(train_dfs)
-            common_test_start, common_test_end, test_dfs = align_data_periods(test_dfs)
+            common_train_start, common_train_end, aligned_train_dfs = align_data_periods(train_dfs)
+            common_test_start, common_test_end, aligned_test_dfs = align_data_periods(test_dfs)
             print("*"*47)
             print(f"Aligned train period sample: {common_train_start.strftime('%Y-%m-%d')} to {common_train_end.strftime('%Y-%m-%d')}")
             print(f"Aligned test period sample:  {common_test_start.strftime('%Y-%m-%d')} to {common_test_end.strftime('%Y-%m-%d')}")
@@ -272,10 +272,12 @@ def run_train_test_analysis(symbol, start_date, end_date, strategy_class, timefr
 
             # Determine maximum lookback needed
 
-            test_dfs_with_lookback = [lookback_test_data(train_df=train_dfs[i],
-                                                    test_df=test_dfs[i],
-                                                    lookback_period_days=lookback_period_days) for i, tf in enumerate(timeframes)
-                                                    if not print(f"Processing timeframe: {tf}")]
+            test_dfs_with_lookback = [lookback_test_data(original_train_df=train_dfs[i],
+                                                        original_test_df=test_dfs[i],
+                                                        aligned_train_df=aligned_train_dfs[i],
+                                                        aligned_test_df=aligned_test_dfs[i],
+                                                        lookback_period_days=lookback_period_days) for i, tf in enumerate(timeframes)
+                                                        if not print(f"Processing timeframe: {tf}")]
             
             test_dfs = [df_tuple[0] for df_tuple in test_dfs_with_lookback]
             lookback_reset_idx = test_dfs_with_lookback[0][1] # Same lookback period for all test samples

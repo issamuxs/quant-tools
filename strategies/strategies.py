@@ -326,7 +326,7 @@ class SmaConfCrossLS(bt.Strategy):
     def next(self):
 
         # For test dataset, reset metrics at test_start_idx
-        if self.p.lookback_reset_idx != 0 and len(self) == self.p.lookback_reset_idx:
+        if self.p.lookback_reset_idx != 0 and len(self) == self.p.lookback_reset_idx + 1:
             self.start_value = self.broker.getvalue()
             self.max_value = self.start_value
             self.max_drawdown = 0
