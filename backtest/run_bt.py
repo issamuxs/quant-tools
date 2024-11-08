@@ -217,7 +217,7 @@ def calculate_stability_stats(df_results):
 
 def run_train_test_analysis(symbol, start_date, end_date, strategy_class, timeframes,
                            train_length_days, test_length_days, param_ranges,
-                           n_samples=10, n_trials=10, gap_days=2, lookback_period_days=None, starting_cash=100000, 
+                           n_samples=10, n_trials=10, gap_days=0, lookback_period_days=None, starting_cash=100000, 
                            commission=0.001, limit=10000):
     """Run walk-forward optimization and out-of-sample testing with random search"""
     
@@ -254,20 +254,20 @@ def run_train_test_analysis(symbol, start_date, end_date, strategy_class, timefr
             
             # Fetch training and testing data
             train_dfs = [fetch_crypto_data(symbol=symbol, timeframe=tf, 
-                                         start_date=train_start.strftime('%Y-%m-%d'), 
-                                         end_date=train_end.strftime('%Y-%m-%d'))
+                                         start_date=train_start.strftime('%Y-%m-%d %H:%M:%S'), 
+                                         end_date=train_end.strftime('%Y-%m-%d %H:%M:%S'))
                         for tf in timeframes]
             test_dfs = [fetch_crypto_data(symbol=symbol, timeframe=tf, 
-                                    start_date=test_start.strftime('%Y-%m-%d'), 
-                                    end_date=test_end.strftime('%Y-%m-%d'),
+                                    start_date=test_start.strftime('%Y-%m-%d %H:%M:%S'), 
+                                    end_date=test_end.strftime('%Y-%m-%d %H:%M:%S'),
                                     limit=limit)
                     for tf in timeframes]
             
             common_train_start, common_train_end, aligned_train_dfs = align_data_periods(train_dfs)
             common_test_start, common_test_end, aligned_test_dfs = align_data_periods(test_dfs)
             print("*"*47)
-            print(f"Aligned train period sample: {common_train_start.strftime('%Y-%m-%d')} to {common_train_end.strftime('%Y-%m-%d')}")
-            print(f"Aligned test period sample:  {common_test_start.strftime('%Y-%m-%d')} to {common_test_end.strftime('%Y-%m-%d')}")
+            print(f"Aligned train period sample: {common_train_start.strftime('%Y-%m-%d %H:%M:%S')} to {common_train_end.strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"Aligned test period sample:  {common_test_start.strftime('%Y-%m-%d %H:%M:%S')} to {common_test_end.strftime('%Y-%m-%d %H:%M:%S')}")
             print("*"*47)
 
             # Determine maximum lookback needed
@@ -285,7 +285,7 @@ def run_train_test_analysis(symbol, start_date, end_date, strategy_class, timefr
             # Optimize on training data
             _, best_params = optimize_strategy_random(
                 strategy_class=strategy_class,
-                df_list=train_dfs,
+                df_list=aligned_train_dfs,
                 lookback_reset_idx=0, # No need for lookback on train periods
                 param_ranges=param_ranges,
                 starting_cash=starting_cash,

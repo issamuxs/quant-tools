@@ -41,14 +41,16 @@ def lookback_test_data(original_train_df, original_test_df, aligned_train_df, al
     Prepare test data with initialization period, using both original datasets
     """
     # Get dates from aligned data
-    aligned_train_end = aligned_train_df.index[-1]
     aligned_test_start = aligned_test_df.index[0]
 
     # Calculate lookback start date
     lookback_start = aligned_test_start - pd.Timedelta(days=lookback_period_days)
 
     # Get lookback data from both original datasets
-    lookback_train = original_train_df[original_train_df.index >= lookback_start].copy()
+    lookback_train = original_train_df[
+        (original_train_df.index >= lookback_start) &
+        (original_train_df.index < aligned_test_start)
+        ].copy()
     lookback_test = original_test_df[
         (original_test_df.index >= lookback_start) & 
         (original_test_df.index < aligned_test_start)
