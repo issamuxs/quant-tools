@@ -217,13 +217,13 @@ class SmaConfCrossLS(bt.Strategy):
         stf_pslow=30, 
         ltf_pfast=20,  
         ltf_pslow=50, 
-        lookback_reset_idx=0,
         last_to_avg_volume_ratio=1.2,
         vol_delta_lb=0.2,
         risk_perc=0.99,
         atr_period=14,
         sl_coef = 1,
-        tp_coef = 1
+        tp_coef = 1,
+        lookback_reset_idx=0
     )
 
     def __init__(self):
@@ -563,4 +563,166 @@ class RSIBBStrategy(bt.Strategy):
                 if (current_price >= self.stop_loss_price) or \
                    (current_price <= self.take_profit_price) or \
                    (self.rsi[-1] < self.params.rsi_threshold_low):
+                    self.close()
+
+class LiquidityImbStrategy(bt.Strategy):
+    params = dict(
+        vol_window=24,        
+        dev_threshold=2.0,    
+        roc_window=6,         
+        volume_ma=12,         
+        rsi_period=14,
+        rsi_thresh_low=30,
+        rsi_thresh_high=70,
+        atr_period=14,
+        sl_coef=1.5,
+        tp_coef=2.0,
+        risk_perc=0.99,
+        lookback_reset_idx=0
+    )
+
+    def __init__(self):
+        # Initialize performance tracking
+        self.start_value = self.broker.getvalue()
+        self.max_value = self.start_value
+        self.max_drawdown = 0
+        self.total_return = 0
+        self.cagr_mdd_ratio = 0
+        self.cagr = 0
+        self.start_date = None
+        
+        # Track trades and returns
+        self.trade_list = []
+        self.trade_returns = []
+        
+        # Initialize trade tracking
+        self.trade_size = None
+        self.entry_price = None
+
+        # Indicators
+        self.price_returns = bt.ind.ROC(self.data.open, period=1)  
+        self.vol = bt.ind.StdDev(self.price_returns, period=self.p.vol_window)  
+        self.roc = bt.ind.ROC(self.data.open, period=self.p.roc_window)
+        self.vol_ma = bt.ind.SMA(self.data.volume, period=self.p.volume_ma)
+        self.vol_ratio = self.data.volume / self.vol_ma
+        self.rsi = bt.ind.RSI(self.data.open, period=self.p.rsi_period)
+        self.atr = bt.indicators.ATR(self.data, period=self.p.atr_period)
+
+    def notify_trade(self, trade):
+        if trade.isclosed:
+            if (self.p.lookback_reset_idx == 0 or len(self) >= self.p.lookback_reset_idx):
+                entry_price = trade.price
+                exit_price = self.data.open[0]
+                
+                position_type = 'Long' if self.trade_size > 0 else 'Short'
+                
+                if self.trade_size >= 0:  # Long position
+                    trade_return = (exit_price - entry_price) / entry_price if entry_price != 0 else 0
+                else:  # Short position
+                    trade_return = (entry_price - exit_price) / entry_price if entry_price != 0 else 0
+                
+                self.trade_list.append({
+                    'position_type': position_type,
+                    'trade_size': self.trade_size,
+                    'entry_date': self.data.datetime.datetime(-trade.barlen),
+                    'exit_date': self.data.datetime.datetime(0),
+                    'duration': trade.barlen,
+                    'entry_price': entry_price,
+                    'exit_price': exit_price,
+                    'pnl': trade.pnl,
+                    'return': trade_return
+                })
+                
+                self.trade_returns.append(trade_return)  # Updated from self.returns
+                self.trade_size = None
+    
+    def next(self):
+        # Wait for indicators to have valid values
+        if len(self) < max(self.p.vol_window, self.p.roc_window, 
+                      self.p.volume_ma, self.p.rsi_period, 
+                      self.p.atr_period):
+            return
+
+        # Reset metrics at lookback_reset_idx for testing
+        if self.p.lookback_reset_idx != 0 and len(self) == self.p.lookback_reset_idx:
+            self.start_value = self.broker.getvalue()
+            self.max_value = self.start_value
+            self.max_drawdown = 0
+            self.total_return = 0
+            self.cagr_mdd_ratio = 0
+            self.cagr = 0
+            self.start_date = self.data.datetime.datetime(0)
+            self.trade_list = []
+            self.trade_returns = []
+
+        # Update dates and values
+        if self.start_date is None:
+            self.start_date = self.data.datetime.datetime(0)
+        
+        current_value = self.broker.getvalue()
+        current_date = self.data.datetime.datetime(0)
+
+        # Update metrics
+        self.max_value = max(self.max_value, current_value)
+        self.total_return = (current_value - self.start_value) / self.start_value
+        
+        drawdown = (self.max_value - current_value) / self.max_value
+        self.max_drawdown = max(self.max_drawdown, drawdown)
+
+        if self.max_drawdown != 0:
+            self.cagr_mdd_ratio = self.cagr / self.max_drawdown
+        
+        years = (current_date - self.start_date).days / 365.25
+        if years > 0:
+            self.cagr = (current_value / self.start_value) ** (1/years) - 1
+
+        # Wait for indicators to have valid values
+        if not all([self.vol[-1], self.vol[-self.p.vol_window], self.roc[-1], 
+                    self.vol_ratio[-1], self.rsi[-1], self.atr[-1]]):
+            return
+
+        # Debug prints for entry conditions
+        if not self.position:
+            
+            vol_condition = self.vol[-1] >= self.vol[-self.p.vol_window] * self.p.dev_threshold
+
+            if not vol_condition:
+                return
+
+            # Long setup: Sharp down move with high volume
+            if (self.roc[-1] < -self.vol[-1] and 
+                self.vol_ratio[-1] > 1.5 and
+                self.rsi[-1] < self.p.rsi_thresh_low):
+
+                size = (self.broker.getcash() * self.p.risk_perc) / self.data.open[0]
+                self.trade_size = size
+                self.buy(size=size)
+                self.entry_price = self.data.open[0]
+                self.stop_loss_price = self.entry_price - self.p.sl_coef * self.atr[0]
+                self.take_profit_price = self.entry_price + self.p.tp_coef * self.atr[0]
+
+            # Short setup: Sharp up move with high volume
+            elif (self.roc[-1] > self.vol[-1] and
+                self.vol_ratio[-1] > 1.5 and
+                self.rsi[-1] > self.p.rsi_thresh_high):
+
+                size = (self.broker.getcash() * self.p.risk_perc) / self.data.open[0]
+                self.trade_size = -size
+                self.sell(size=size)
+                self.entry_price = self.data.open[0]
+                self.stop_loss_price = self.entry_price + self.p.sl_coef * self.atr[0]
+                self.take_profit_price = self.entry_price - self.p.tp_coef * self.atr[0]
+
+        else:
+            # Exit logic
+            if self.trade_size > 0:  # Long position
+                if (self.data.open[0] <= self.stop_loss_price or
+                    self.data.open[0] >= self.take_profit_price or
+                    self.rsi[0] > self.p.rsi_thresh_high):
+                    self.close()
+
+            else:  # Short position
+                if (self.data.open[0] >= self.stop_loss_price or
+                    self.data.open[0] <= self.take_profit_price or
+                    self.rsi[0] < self.p.rsi_thresh_low):
                     self.close()

@@ -20,23 +20,25 @@ def align_data_periods(df_list):
 def format_data_cerebro(df_list):
 
     data_df_list = []
-
-    for df in df_list:
-        data_df = bt.feeds.PandasData(
-        dataname=df,
-        datetime=None,
-        open=0,
-        high=1,
-        low=2,
-        close=3,
-        volume=4,
-        openinterest=-1
-        )
-        data_df_list.append(data_df)
+    try:
+        for df in df_list:
+            data_df = bt.feeds.PandasData(
+            dataname=df,
+            datetime=None,
+            open=0,
+            high=1,
+            low=2,
+            close=3,
+            volume=4,
+            openinterest=-1
+            )
+            data_df_list.append(data_df)
+    except Exception as e:
+        print(f"Error while formatting data for Cerebro: {type(e).__name__}: {str(e)}")
 
     return data_df_list
 
-def lookback_test_data(original_train_df, original_test_df, aligned_train_df, aligned_test_df, lookback_period_days):
+def lookback_test_data(original_train_df, original_test_df, aligned_test_df, lookback_period_days):
     """
     Prepare test data with initialization period, using both original datasets
     """

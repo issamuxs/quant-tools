@@ -10,53 +10,60 @@ def execute_backtest(strategy_class, df_list, lookback_reset_idx, strategy_param
     """
     Core backtest execution function with prepared data
     """
-    cerebro = bt.Cerebro()
-    
-    # Format and add data
-    data_list = format_data_cerebro(df_list)
-    for data in data_list:
-        cerebro.adddata(data)
-    
-    # Add test_start_idx to strategy parameters
-    strategy_params['lookback_reset_idx']=lookback_reset_idx
+    try:
+        print(f"Starting backtest for strategy {strategy_class.__name__}...")
+        cerebro = bt.Cerebro()
+        
+        # Format and add data
+        data_list = format_data_cerebro(df_list)
+        for data in data_list:
+            cerebro.adddata(data)
+        
+        # Add test_start_idx to strategy parameters
+        strategy_params['lookback_reset_idx']=lookback_reset_idx
 
-    # Setup strategy and broker
-    cerebro.addstrategy(strategy_class, **strategy_params)
-    cerebro.broker.setcash(starting_cash)
-    cerebro.broker.setcommission(commission=commission)
-    cerebro.addanalyzer(bt.analyzers.Returns, _name='returns')
-    cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name='trades')
+        # Setup strategy and broker
+        cerebro.addstrategy(strategy_class, **strategy_params)
+        cerebro.broker.setcash(starting_cash)
+        cerebro.broker.setcommission(commission=commission)
+        cerebro.addanalyzer(bt.analyzers.Returns, _name='returns')
+        cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name='trades')
+        
+        # Run backtest
+        results = cerebro.run()
+        strategy = results[0]
+        trades = strategy.analyzers.trades.get_analysis()
+
+        # Log print including lookback info
+        print("*"*47)
+        print(f"Start date with lookback: {df_list[0].index[0]}")
+        print(f"Start date w/o lookback: {df_list[0].index[lookback_reset_idx]}")
+        print(f"Start date of trade logs: {strategy.start_date}")
+        print(f"End date: {df_list[0].index[-1]}")
+        print("*"*47)
+        print(f"Total return: {strategy.total_return:.2%}")
+        print(f"CAGR: {strategy.cagr:.2%}")
+        print(f"MDD: {strategy.max_drawdown:.2%}")
+        print(f"CAGR/MDD: {strategy.cagr_mdd_ratio:.2f}")
+        print("Backtest completed successfully.")
+        print("*"*47)
+
+        return {
+            'total_return': strategy.total_return,
+            'cagr': strategy.cagr,
+            'max_drawdown': strategy.max_drawdown,
+            'cagr_mdd_ratio': strategy.cagr_mdd_ratio,
+            'n_trades': trades.total.total if hasattr(trades, 'total') else 0,
+            'win_trades': trades.won.total if hasattr(trades, 'won') else 0,
+            'loss_trades': trades.lost.total if hasattr(trades, 'lost') else 0,
+            'lookback_start': df_list[0].index[0].strftime('%Y-%m-%d'),
+            'test_start': df_list[0].index[lookback_reset_idx].strftime('%Y-%m-%d'),
+            'test_end': df_list[0].index[-1].strftime('%Y-%m-%d')
+        }
     
-    # Run backtest
-    results = cerebro.run()
-    strategy = results[0]
-    trades = strategy.analyzers.trades.get_analysis()
-
-    # Log print including lookback info
-    print("*"*47)
-    print(f"Start date with lookback: {df_list[0].index[0]}")
-    print(f"Start date w/o lookback: {df_list[0].index[lookback_reset_idx]}")
-    print(f"Start date of trade logs: {strategy.start_date}")
-    print(f"End date: {df_list[0].index[-1]}")
-    print("*"*47)
-    print(f"Total return: {strategy.total_return:.2%}")
-    print(f"CAGR: {strategy.cagr:.2%}")
-    print(f"MDD: {strategy.max_drawdown:.2%}")
-    print(f"CAGR/MDD: {strategy.cagr_mdd_ratio:.2f}")
-    print("*"*47)
-
-    return {
-        'total_return': strategy.total_return,
-        'cagr': strategy.cagr,
-        'max_drawdown': strategy.max_drawdown,
-        'cagr_mdd_ratio': strategy.cagr_mdd_ratio,
-        'n_trades': trades.total.total if hasattr(trades, 'total') else 0,
-        'win_trades': trades.won.total if hasattr(trades, 'won') else 0,
-        'loss_trades': trades.lost.total if hasattr(trades, 'lost') else 0,
-        'lookback_start': df_list[0].index[0].strftime('%Y-%m-%d'),
-        'test_start': df_list[0].index[lookback_reset_idx].strftime('%Y-%m-%d'),
-        'test_end': df_list[0].index[-1].strftime('%Y-%m-%d')
-    }
+    except Exception as e:
+        print(f"Error during backtest execution: {e}")
+        raise
 
 
 def optimize_strategy_random(strategy_class, df_list, lookback_reset_idx, param_ranges, starting_cash, commission, 
@@ -274,7 +281,6 @@ def run_train_test_analysis(symbol, start_date, end_date, strategy_class, timefr
 
             test_dfs_with_lookback = [lookback_test_data(original_train_df=train_dfs[i],
                                                         original_test_df=test_dfs[i],
-                                                        aligned_train_df=aligned_train_dfs[i],
                                                         aligned_test_df=aligned_test_dfs[i],
                                                         lookback_period_days=lookback_period_days) for i, tf in enumerate(timeframes)
                                                         if not print(f"Processing timeframe: {tf}")]
@@ -310,6 +316,7 @@ def run_train_test_analysis(symbol, start_date, end_date, strategy_class, timefr
             })
             
             test_results.append(test_result)
+
             print(f"Completed train-test cycle starting at {train_start.strftime('%Y-%m-%d')}")
             print("*"*94)
             
