@@ -8,7 +8,18 @@ from utils.prep_data import align_data_periods, format_data_cerebro, lookback_te
 
 def execute_backtest(strategy_class, df_list, lookback_reset_idx, strategy_params, starting_cash, commission):
     """
-    Core backtest execution function with prepared data
+    Execute a backtest for a given strategy and data.
+    
+    Args:
+        strategy_class (class): Strategy class to be tested.
+        df_list (list): List of dataframes containing historical data.
+        lookback_reset_idx (int): Index to reset lookback period.
+        strategy_params (dict): Dictionary of strategy parameters.
+        starting_cash (float): Starting cash for the backtest.
+        commission (float): Commission rate for the backtest.
+    
+    Returns:
+        dict: Dictionary containing backtest results.
     """
     try:
         print(f"Starting backtest for strategy {strategy_class.__name__}...")
@@ -178,7 +189,15 @@ def geometric_mean(returns):
     return gmean_return
 
 def calculate_stability_stats(df_results):
-    """Calculate statistical metrics for backtest results"""
+    """
+    Calculate statistical metrics for a given set of values.
+    
+    Args:
+        values (array-like): Array of numerical values.
+    
+    Returns:
+        dict: Dictionary containing statistical metrics.
+    """
     metrics = ['total_return', 'cagr', 'max_drawdown', 
                'n_trades', 'win_trades', 'loss_trades']
     
@@ -226,7 +245,29 @@ def run_train_test_analysis(symbol, start_date, end_date, strategy_class, timefr
                            train_length_days, test_length_days, param_ranges,
                            n_samples=10, n_trials=10, gap_days=0, lookback_period_days=None, starting_cash=100000, 
                            commission=0.001, limit=10000):
-    """Run walk-forward optimization and out-of-sample testing with random search"""
+    """
+    Run walk-forward optimization and out-of-sample testing with random search.
+    
+    Args:
+        symbol (str): Trading symbol.
+        start_date (str): Start date for the analysis.
+        end_date (str): End date for the analysis.
+        strategy_class (class): Strategy class to be tested.
+        timeframes (list): List of timeframes to be used.
+        train_length_days (int): Number of days for the training period.
+        test_length_days (int): Number of days for the testing period.
+        param_ranges (dict): Dictionary of parameter ranges for optimization.
+        n_samples (int): Number of samples for walk-forward analysis.
+        n_trials (int): Number of trials for random search.
+        gap_days (int): Number of gap days between training and testing periods.
+        lookback_period_days (int): Number of days for the lookback period.
+        starting_cash (float): Starting cash for the backtest.
+        commission (float): Commission rate for the backtest.
+        limit (int): Limit for the number of data points.
+    
+    Returns:
+        tuple: DataFrame of results and best parameters.
+    """
     
     # Convert dates to timestamps
     global_start = pd.Timestamp(start_date)
@@ -330,6 +371,12 @@ def run_train_test_analysis(symbol, start_date, end_date, strategy_class, timefr
     return df_test_results, stats
 
 def print_stability_stats(stability_stats):
+    """
+    Print stability statistics for various metrics.
+    
+    Args:
+        stability_stats (dict): Dictionary containing stability statistics for various metrics.
+    """
     # Define which metrics are percentages
     pct_metrics = {'total_return', 'cagr', 'max_drawdown'}
 
@@ -368,6 +415,7 @@ def print_stability_stats(stability_stats):
             print(f"IQR: {stat['iqr']:.2f}")
             print(f"Min: {stat['min']:.2f}")
             print(f"Max: {stat['max']:.2f}")
+
 
 
 def analyze_test_results(df_results):

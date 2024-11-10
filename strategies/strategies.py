@@ -566,6 +566,12 @@ class RSIBBStrategy(bt.Strategy):
                     self.close()
 
 class LiquidityImbStrategy(bt.Strategy):
+    """
+    Strategy class for liquidity imbalance trading.
+    
+    Attributes:
+        params (dict): Dictionary of strategy parameters.
+    """
     params = dict(
         vol_window=24,        
         dev_threshold=2.0,    
@@ -582,6 +588,9 @@ class LiquidityImbStrategy(bt.Strategy):
     )
 
     def __init__(self):
+        """
+        Initialize the strategy with indicators and tracking variables.
+        """
         # Initialize performance tracking
         self.start_value = self.broker.getvalue()
         self.max_value = self.start_value
@@ -609,6 +618,12 @@ class LiquidityImbStrategy(bt.Strategy):
         self.atr = bt.indicators.ATR(self.data, period=self.p.atr_period)
 
     def notify_trade(self, trade):
+        """
+        Notify when a trade is closed and update trade statistics.
+        
+        Args:
+            trade (Trade): Trade object containing trade details.
+        """
         if trade.isclosed:
             if (self.p.lookback_reset_idx == 0 or len(self) >= self.p.lookback_reset_idx):
                 entry_price = trade.price
@@ -637,6 +652,9 @@ class LiquidityImbStrategy(bt.Strategy):
                 self.trade_size = None
     
     def next(self):
+        """
+        Define the logic to be executed on each bar of data.
+        """
         # Wait for indicators to have valid values
         if len(self) < max(self.p.vol_window, self.p.roc_window, 
                       self.p.volume_ma, self.p.rsi_period, 
@@ -683,7 +701,7 @@ class LiquidityImbStrategy(bt.Strategy):
 
         # Debug prints for entry conditions
         if not self.position:
-            
+
             vol_condition = self.vol[-1] >= self.vol[-self.p.vol_window] * self.p.dev_threshold
 
             if not vol_condition:
