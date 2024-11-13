@@ -8,16 +8,6 @@ class BuyHold(bt.Strategy):
         params (dict): Strategy parameters.
             risk_perc (float): Percentage of cash to risk per trade.
             lookback_reset_idx (int): Lookback period for resetting index.
-        trade_size (float): Size of the trade.
-        start_value (float): Initial value of the broker.
-        max_value (float): Maximum value of the broker during the backtest.
-        max_drawdown (float): Maximum drawdown observed during the backtest.
-        total_return (float): Total return of the strategy.
-        cagr_mdd_ratio (float): Compound Annual Growth Rate to Maximum Drawdown ratio.
-        cagr (float): Compound Annual Growth Rate.
-        start_date (datetime): Start date of the backtest.
-        trade_list (list): List of trades executed.
-        returns (list): List of returns for each trade.
     Methods:
         __init__(): Initializes the strategy.
         stop(): Called when the backtest ends, closes any open positions.
@@ -55,36 +45,50 @@ class BuyHold(bt.Strategy):
 
     def notify_trade(self, trade):
         if trade.isclosed:
-            entry_price = trade.price
-            exit_price = self.data_stf.open[0]
-            size = trade.size
-            
-            position_type = 'Long' 
-            
-            # Calculate PnL and return
-            trade_return = (exit_price - entry_price) / entry_price if entry_price != 0 else 0
-            pnl = (exit_price - entry_price) * abs(size)
-            
-            # Store trade information
-            self.trade_list.append({
-                'position_type': position_type,
-                'trade_size': size,
-                'entry_date': self.data_stf.datetime.datetime(-trade.barlen),
-                'exit_date': self.data_stf.datetime.datetime(0),
-                'duration': trade.barlen,
-                'entry_price': entry_price,
-                'exit_price': exit_price,
-                'pnl': pnl,
-                'return': trade_return
-            })
-            
-            # Track returns
-            self.returns.append(trade_return)
+            if (self.p.lookback_reset_idx == 0 or len(self) >= self.p.lookback_reset_idx):
+                entry_price = trade.price
+                exit_price = self.data_stf.open[0]
+                size = trade.size
+                
+                position_type = 'Long' 
+                
+                # Calculate PnL and return
+                trade_return = (exit_price - entry_price) / entry_price if entry_price != 0 else 0
+                pnl = (exit_price - entry_price) * abs(size)
+                
+                # Store trade information
+                self.trade_list.append({
+                    'position_type': position_type,
+                    'trade_size': size,
+                    'entry_date': self.data_stf.datetime.datetime(-trade.barlen),
+                    'exit_date': self.data_stf.datetime.datetime(0),
+                    'duration': trade.barlen,
+                    'entry_price': entry_price,
+                    'exit_price': exit_price,
+                    'pnl': pnl,
+                    'return': trade_return
+                })
+                
+                # Track returns
+                self.returns.append(trade_return)
 
-            # Reset the trade size
-            self.trade_size = None
+                # Reset the trade size
+                self.trade_size = None
 
     def next(self):
+
+        # Reset metrics at lookback_reset_idx for testing
+        if self.p.lookback_reset_idx != 0 and len(self) == self.p.lookback_reset_idx + 1:
+            self.start_value = self.broker.getvalue()
+            self.max_value = self.start_value
+            self.max_drawdown = 0
+            self.total_return = 0
+            self.cagr_mdd_ratio = 0
+            self.cagr = 0
+            self.start_date = self.data.datetime.datetime(0)
+            self.trade_list = []
+            self.trade_returns = []
+            
         # Update dates and values
         if self.start_date is None:
             self.start_date = self.data.datetime.datetime(0)
@@ -128,6 +132,7 @@ class SmaSimpleCrossL(bt.Strategy):
             atr_period (int): Period for the ATR calculation.
             sl_coef (float): Coefficient for calculating the stop loss based on ATR.
             tp_coef (float): Coefficient for calculating the take profit based on ATR.
+            lookback_reset_idx (int): Lookback period for resetting index.
     Methods:
         __init__(): Initializes the strategy.
         notify_trade(trade): Notifies when a trade is closed and stores trade information.
@@ -139,7 +144,8 @@ class SmaSimpleCrossL(bt.Strategy):
         risk_perc=0.99,
         atr_period=14,
         sl_coef=1,
-        tp_coef=1
+        tp_coef=1,
+        lookback_reset_idx=0  
     )
 
     def __init__(self):
@@ -175,32 +181,46 @@ class SmaSimpleCrossL(bt.Strategy):
 
     def notify_trade(self, trade):
         if trade.isclosed:
-            entry_price = trade.price
-            exit_price = self.data.open[0]
-            
-            position_type = 'Long' 
-            trade_return = (exit_price - entry_price) / entry_price if entry_price != 0 else 0
-            
-            # Store trade information
-            self.trade_list.append({
-                'position_type': position_type,
-                'trade_size': self.trade_size,
-                'entry_date': self.datas[0].datetime.datetime(-trade.barlen),
-                'exit_date': self.datas[0].datetime.datetime(0),
-                'duration': trade.barlen,
-                'entry_price': entry_price,
-                'exit_price': exit_price,
-                'pnl': trade.pnl,
-                'return': trade_return
-            })
-            
-            # Track returns
-            self.returns.append(trade_return)
-            
-            # Reset trade size
-            self.trade_size = None
+            if (self.p.lookback_reset_idx == 0 or len(self) >= self.p.lookback_reset_idx): # If training or past lookback period
+                entry_price = trade.price
+                exit_price = self.data.open[0]
+                
+                position_type = 'Long' 
+                trade_return = (exit_price - entry_price) / entry_price if entry_price != 0 else 0
+                
+                # Store trade information
+                self.trade_list.append({
+                    'position_type': position_type,
+                    'trade_size': self.trade_size,
+                    'entry_date': self.datas[0].datetime.datetime(-trade.barlen),
+                    'exit_date': self.datas[0].datetime.datetime(0),
+                    'duration': trade.barlen,
+                    'entry_price': entry_price,
+                    'exit_price': exit_price,
+                    'pnl': trade.pnl,
+                    'return': trade_return
+                })
+                
+                # Track returns
+                self.returns.append(trade_return)
+                
+                # Reset trade size
+                self.trade_size = None
 
     def next(self):
+
+        # Reset metrics at lookback_reset_idx for testing
+        if self.p.lookback_reset_idx != 0 and len(self) == self.p.lookback_reset_idx + 1:
+            self.start_value = self.broker.getvalue()
+            self.max_value = self.start_value
+            self.max_drawdown = 0
+            self.total_return = 0
+            self.cagr_mdd_ratio = 0
+            self.cagr = 0
+            self.start_date = self.data.datetime.datetime(0)
+            self.trade_list = []
+            self.trade_returns = []
+
         # Update dates and values
         if self.start_date is None:
             self.start_date = self.data.datetime.datetime(0)
@@ -482,6 +502,7 @@ class RSIBBStrategy(bt.Strategy):
         atr_period (int): Period for the ATR calculation.
         sl_coef (float): Coefficient for calculating the stop loss based on ATR.
         tp_coef (float): Coefficient for calculating the take profit based on ATR.
+        lookback_reset_idx (int): Index to reset performance metrics for testing.
     Methods:
         __init__(): Initializes the strategy, indicators, and tracking variables.
         notify_trade(trade): Tracks closed trades and calculates returns.
@@ -497,7 +518,8 @@ class RSIBBStrategy(bt.Strategy):
         risk_perc=0.99,
         atr_period=14,
         sl_coef=1,
-        tp_coef=1
+        tp_coef=1,
+        lookback_reset_idx=0  
     )
 
     def __init__(self):
@@ -544,32 +566,45 @@ class RSIBBStrategy(bt.Strategy):
 
     def notify_trade(self, trade):
         if trade.isclosed:
-            entry_price = trade.price
-            exit_price = self.data.open[0]
-            
-            position_type = 'Long' if self.trade_size > 0 else 'Short'
-            
-            if self.trade_size >= 0:  # Long position
-                trade_return = (exit_price - entry_price) / entry_price if entry_price != 0 else 0
-            else:  # Short position
-                trade_return = (entry_price - exit_price) / entry_price if entry_price != 0 else 0
-            
-            self.trade_list.append({
-                'position_type': position_type,
-                'trade_size': self.trade_size,
-                'entry_date': self.data.datetime.datetime(-trade.barlen),
-                'exit_date': self.data.datetime.datetime(0),
-                'duration': trade.barlen,
-                'entry_price': entry_price,
-                'exit_price': exit_price,
-                'pnl': trade.pnl,
-                'return': trade_return
-            })
-            
-            self.returns.append(trade_return)
-            self.trade_size = None
+            if (self.p.lookback_reset_idx == 0 or len(self) >= self.p.lookback_reset_idx):
+                entry_price = trade.price
+                exit_price = self.data.open[0]
+                
+                position_type = 'Long' if self.trade_size > 0 else 'Short'
+                
+                if self.trade_size >= 0:  # Long position
+                    trade_return = (exit_price - entry_price) / entry_price if entry_price != 0 else 0
+                else:  # Short position
+                    trade_return = (entry_price - exit_price) / entry_price if entry_price != 0 else 0
+                
+                self.trade_list.append({
+                    'position_type': position_type,
+                    'trade_size': self.trade_size,
+                    'entry_date': self.data.datetime.datetime(-trade.barlen),
+                    'exit_date': self.data.datetime.datetime(0),
+                    'duration': trade.barlen,
+                    'entry_price': entry_price,
+                    'exit_price': exit_price,
+                    'pnl': trade.pnl,
+                    'return': trade_return
+                })
+                
+                self.returns.append(trade_return)
+                self.trade_size = None
 
     def next(self):
+        # Reset metrics at lookback_reset_idx for testing
+        if self.p.lookback_reset_idx != 0 and len(self) == self.p.lookback_reset_idx + 1:
+            self.start_value = self.broker.getvalue()
+            self.max_value = self.start_value
+            self.max_drawdown = 0
+            self.total_return = 0
+            self.cagr_mdd_ratio = 0
+            self.cagr = 0
+            self.start_date = self.data.datetime.datetime(0)
+            self.trade_list = []
+            self.trade_returns = []
+
         # Update dates and values
         if self.start_date is None:
             self.start_date = self.data.datetime.datetime(0)
@@ -756,7 +791,7 @@ class LiquidityImbStrategy(bt.Strategy):
             return
 
         # Reset metrics at lookback_reset_idx for testing
-        if self.p.lookback_reset_idx != 0 and len(self) == self.p.lookback_reset_idx:
+        if self.p.lookback_reset_idx != 0 and len(self) == self.p.lookback_reset_idx + 1:
             self.start_value = self.broker.getvalue()
             self.max_value = self.start_value
             self.max_drawdown = 0
