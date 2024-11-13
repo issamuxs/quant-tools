@@ -3,8 +3,15 @@ import pandas as pd
 
 def align_data_periods(df_list):
     """
-    Align data periods for multiple timeframes, ensuring proper overlap
+    Aligns the periods of a list of DataFrames to a common start and end date.
+    Parameters:
+    df_list (list of pd.DataFrame): List of DataFrames to be aligned.
+    Returns:
+    tuple: A tuple containing the common start date, common end date, and a list of aligned DataFrames.
+    Raises:
+    ValueError: If the input list is empty.
     """
+
     if not df_list:
         raise ValueError("DataFrame list is empty")
     
@@ -18,6 +25,18 @@ def align_data_periods(df_list):
     return common_start, common_end, aligned_df_list
 
 def format_data_cerebro(df_list):
+    """
+    Formats a list of pandas DataFrames for use with the Cerebro engine in Backtrader.
+
+    Args:
+        df_list (list): A list of pandas DataFrames to be formatted.
+
+    Returns:
+        list: A list of Backtrader PandasData objects.
+
+    Raises:
+        Exception: If there is an error during the formatting process.
+    """
 
     data_df_list = []
     try:
@@ -40,8 +59,20 @@ def format_data_cerebro(df_list):
 
 def lookback_test_data(original_train_df, original_test_df, aligned_test_df, lookback_period_days):
     """
-    Prepare test data with initialization period, using both original datasets
+    Prepares test data with a lookback period.
+    This function combines a lookback period of data from the original training and test datasets
+    with the aligned test dataset. It ensures that there are no duplicate indices and marks the 
+    point where the actual test period starts.
+    Parameters:
+    original_train_df (pd.DataFrame): The original training dataset.
+    original_test_df (pd.DataFrame): The original test dataset.
+    aligned_test_df (pd.DataFrame): The aligned test dataset.
+    lookback_period_days (int): The number of days to look back from the start of the aligned test data.
+    Returns:
+    pd.DataFrame: The combined dataset with the lookback period and aligned test data.
+    int: The index position where the actual test period starts.
     """
+
     # Get dates from aligned data
     aligned_test_start = aligned_test_df.index[0]
 

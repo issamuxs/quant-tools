@@ -8,19 +8,20 @@ from utils.prep_data import align_data_periods, format_data_cerebro, lookback_te
 
 def execute_backtest(strategy_class, df_list, lookback_reset_idx, strategy_params, starting_cash, commission):
     """
-    Execute a backtest for a given strategy and data.
-    
-    Args:
-        strategy_class (class): Strategy class to be tested.
-        df_list (list): List of dataframes containing historical data.
-        lookback_reset_idx (int): Index to reset lookback period.
-        strategy_params (dict): Dictionary of strategy parameters.
-        starting_cash (float): Starting cash for the backtest.
-        commission (float): Commission rate for the backtest.
-    
+    Executes a backtest for a given trading strategy.
+    Parameters:
+    strategy_class (class): The trading strategy class to be tested.
+    df_list (list): List of dataframes containing the historical data.
+    lookback_reset_idx (int): Index to reset the lookback period.
+    strategy_params (dict): Parameters for the trading strategy.
+    starting_cash (float): Initial cash for the backtest.
+    commission (float): Commission rate for the broker.
     Returns:
-        dict: Dictionary containing backtest results.
+    dict: A dictionary containing the backtest results including total return, CAGR, max drawdown, 
+          CAGR/MDD ratio, number of trades, winning trades, losing trades, lookback start date, 
+          test start date, and test end date.
     """
+
     try:
         print(f"Starting backtest for strategy {strategy_class.__name__}...")
         cerebro = bt.Cerebro()
@@ -77,11 +78,22 @@ def execute_backtest(strategy_class, df_list, lookback_reset_idx, strategy_param
         raise
 
 
-def optimize_strategy_random(strategy_class, df_list, lookback_reset_idx, param_ranges, starting_cash, commission, 
-                          n_trials, random_state):
+def optimize_strategy_random(strategy_class, df_list, lookback_reset_idx, param_ranges, starting_cash, commission, n_trials, random_state):
     """
-    Optimize strategy parameters using random search
+    Optimize a trading strategy using random parameter search.
+    Parameters:
+    strategy_class (class): The trading strategy class to be optimized.
+    df_list (list): List of dataframes containing historical data.
+    lookback_reset_idx (int): Index to reset lookback period.
+    param_ranges (dict): Dictionary of parameter ranges to sample from.
+    starting_cash (float): Initial cash for the backtest.
+    commission (float): Commission rate for trades.
+    n_trials (int): Number of random trials to perform.
+    random_state (int, optional): Seed for random number generator.
+    Returns:
+    tuple: A tuple containing the DataFrame of results and the best parameters found.
     """
+
     if random_state is not None:
         np.random.seed(random_state)
 
@@ -142,8 +154,18 @@ def optimize_strategy_random(strategy_class, df_list, lookback_reset_idx, param_
 
 def generate_train_test_periods(start, end, train_length_days, test_length_days, gap_days, n_samples):
     """
-    Generate bootstrap samples of aligned train-test periods
+    Generate train and test periods for backtesting.
+    Parameters:
+    start (str): The start date of the overall period in 'YYYY-MM-DD' format.
+    end (str): The end date of the overall period in 'YYYY-MM-DD' format.
+    train_length_days (int): The length of the training period in days.
+    test_length_days (int): The length of the testing period in days.
+    gap_days (int): The number of days between the training and testing periods.
+    n_samples (int): The number of train-test periods to generate.
+    Returns:
+    list: A list of dictionaries, each containing 'train_start', 'train_end', 'test_start', and 'test_end' keys with corresponding date values in 'YYYY-MM-DD' format.
     """
+  
     start = pd.Timestamp(start)
     end = pd.Timestamp(end)
     total_period = train_length_days + test_length_days + gap_days
@@ -176,7 +198,16 @@ def generate_train_test_periods(start, end, train_length_days, test_length_days,
     return periods
 
 def geometric_mean(returns):
-    """Compute geometric mean for returns, allowing for negative returns"""
+    """
+    Calculate the geometric mean of a series of returns.
+    The geometric mean is calculated by transforming the returns using the natural logarithm,
+    computing the mean of the transformed returns, and then exponentiating back to the original scale.
+    Parameters:
+    returns (array-like): A series of returns.
+    Returns:
+    float: The geometric mean of the returns.
+    """
+
     # Ensure the returns are in the form of 1 + return (e.g., 10% return is 1.1)
     transformed_returns = np.log1p(returns)  # log(1 + return)
     
@@ -373,10 +404,14 @@ def run_train_test_analysis(symbol, start_date, end_date, strategy_class, timefr
 def print_stability_stats(stability_stats):
     """
     Print stability statistics for various metrics.
-    
-    Args:
-        stability_stats (dict): Dictionary containing stability statistics for various metrics.
+
+    Parameters:
+    stability_stats (dict): A dictionary where keys are metric names and values are dictionaries containing statistical data.
+
+    The function handles different metrics such as 'total_return', 'cagr', 'max_drawdown', 'cagr_mdd_ratio', and others,
+    and prints their geometric mean, mean, standard deviation, 95% confidence interval, median, interquartile range, minimum, and maximum values.
     """
+
     # Define which metrics are percentages
     pct_metrics = {'total_return', 'cagr', 'max_drawdown'}
 
@@ -420,8 +455,18 @@ def print_stability_stats(stability_stats):
 
 def analyze_test_results(df_results):
     """
-    Find most recurring complete parameter set from test samples
+    Analyze the test results from a backtest.
+    This function performs the following tasks:
+    1. Extracts and counts the frequency of optimized parameter sets.
+    2. Prints the frequency analysis of parameter sets.
+    3. Calculates and prints average performance statistics on test samples.
+    4. Identifies and returns the most recurring parameter set.
+    Args:
+        df_results (pd.DataFrame): DataFrame containing the backtest results with an 'optimized_params' column.
+    Returns:
+        dict: The most recurring parameter set from the test samples.
     """
+
     # Get all optimal parameters
     optimal_params = df_results['optimized_params'].tolist()
     

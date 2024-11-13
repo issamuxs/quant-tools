@@ -2,9 +2,32 @@ import backtrader as bt
 from datetime import datetime
 
 class BuyHold(bt.Strategy):
+    """
+    A Backtrader strategy that implements a simple Buy and Hold strategy.
+    Attributes:
+        params (dict): Strategy parameters.
+            risk_perc (float): Percentage of cash to risk per trade.
+            lookback_reset_idx (int): Lookback period for resetting index.
+        trade_size (float): Size of the trade.
+        start_value (float): Initial value of the broker.
+        max_value (float): Maximum value of the broker during the backtest.
+        max_drawdown (float): Maximum drawdown observed during the backtest.
+        total_return (float): Total return of the strategy.
+        cagr_mdd_ratio (float): Compound Annual Growth Rate to Maximum Drawdown ratio.
+        cagr (float): Compound Annual Growth Rate.
+        start_date (datetime): Start date of the backtest.
+        trade_list (list): List of trades executed.
+        returns (list): List of returns for each trade.
+    Methods:
+        __init__(): Initializes the strategy.
+        stop(): Called when the backtest ends, closes any open positions.
+        notify_trade(trade): Called when a trade is closed, records trade details.
+        next(): Called on each new bar/candle, updates metrics and executes trading logic.
+    """
 
     params = dict(
-        risk_perc=0.99  
+        risk_perc=0.99,
+        lookback_reset_idx=0  
     )
 
     def __init__(self):
@@ -95,6 +118,21 @@ class BuyHold(bt.Strategy):
 
 
 class SmaSimpleCrossL(bt.Strategy):
+    """
+    A simple moving average crossover strategy with ATR-based stop loss and take profit.
+    Attributes:
+        params (dict): Strategy parameters.
+            pfast (int): Period for the fast SMA.
+            pslow (int): Period for the slow SMA.
+            risk_perc (float): Percentage of cash to risk per trade.
+            atr_period (int): Period for the ATR calculation.
+            sl_coef (float): Coefficient for calculating the stop loss based on ATR.
+            tp_coef (float): Coefficient for calculating the take profit based on ATR.
+    Methods:
+        __init__(): Initializes the strategy.
+        notify_trade(trade): Notifies when a trade is closed and stores trade information.
+        next(): Defines the logic to be executed on each new bar of data.
+    """
     params = dict(
         pfast=10,  
         pslow=30,  
@@ -212,6 +250,29 @@ class SmaSimpleCrossL(bt.Strategy):
 
 
 class SmaConfCrossLS(bt.Strategy):
+    """
+    A trading strategy that uses Simple Moving Average (SMA) crossovers on two different timeframes (short and long)
+    with volume confirmation to generate long and short signals. The strategy also incorporates risk management 
+    through stop loss and take profit levels based on the Average True Range (ATR).
+    Attributes:
+        params (dict): A dictionary of parameters for the strategy.
+            stf_pfast (int): Period for the fast SMA on the short timeframe.
+            stf_pslow (int): Period for the slow SMA on the short timeframe.
+            ltf_pfast (int): Period for the fast SMA on the long timeframe.
+            ltf_pslow (int): Period for the slow SMA on the long timeframe.
+            last_to_avg_volume_ratio (float): Ratio of the last volume to the average volume for confirmation.
+            vol_delta_lb (float): Lower bound for volume delta for confirmation.
+            risk_perc (float): Percentage of cash to risk per trade.
+            atr_period (int): Period for the ATR calculation.
+            sl_coef (float): Coefficient for calculating the stop loss based on ATR.
+            tp_coef (float): Coefficient for calculating the take profit based on ATR.
+            lookback_reset_idx (int): Index to reset performance metrics for testing.
+    Methods:
+        __init__(): Initializes the strategy.
+        volume_confirmation(): Checks if the volume conditions are met for a trade signal.
+        notify_trade(trade): Notifies when a trade is closed and tracks trade performance.
+        next(): Defines the logic to be executed on each new bar of data.
+    """
     params = dict(
         stf_pfast=10,  
         stf_pslow=30, 
@@ -408,6 +469,24 @@ class SmaConfCrossLS(bt.Strategy):
                         self.close()
 
 class RSIBBStrategy(bt.Strategy):
+    """
+    RSIBBStrategy is a trading strategy that combines RSI and Bollinger Bands indicators to generate buy and sell signals.
+    Parameters:
+        rsi_period (int): Period for the RSI calculation.
+        bb_period (int): Period for the Bollinger Bands calculation.
+        bb_devfactor (float): Standard deviation factor for the Bollinger Bands.
+        rsi_threshold_low (int): Lower threshold for the RSI to generate buy signals.
+        rsi_threshold_high (int): Upper threshold for the RSI to generate sell signals.
+        bb_width_threshold (float): Minimum width of the Bollinger Bands to consider signals.
+        risk_perc (float): Percentage of available cash to risk per trade.
+        atr_period (int): Period for the ATR calculation.
+        sl_coef (float): Coefficient for calculating the stop loss based on ATR.
+        tp_coef (float): Coefficient for calculating the take profit based on ATR.
+    Methods:
+        __init__(): Initializes the strategy, indicators, and tracking variables.
+        notify_trade(trade): Tracks closed trades and calculates returns.
+        next(): Defines the logic for generating buy/sell signals and managing open positions.
+    """
     params = dict(
         rsi_period=14,
         bb_period=30,
@@ -567,10 +646,25 @@ class RSIBBStrategy(bt.Strategy):
 
 class LiquidityImbStrategy(bt.Strategy):
     """
-    Strategy class for liquidity imbalance trading.
-    
+    LiquidityImbStrategy is a trading strategy based on liquidity imbalance.
     Attributes:
-        params (dict): Dictionary of strategy parameters.
+        params (dict): Strategy parameters.
+            vol_window (int): Window period for volatility calculation.
+            dev_threshold (float): Threshold for deviation in volatility.
+            roc_window (int): Window period for Rate of Change calculation.
+            volume_ma (int): Period for moving average of volume.
+            rsi_period (int): Period for RSI calculation.
+            rsi_thresh_low (int): Lower threshold for RSI.
+            rsi_thresh_high (int): Upper threshold for RSI.
+            atr_period (int): Period for ATR calculation.
+            sl_coef (float): Coefficient for calculating the stop loss based on ATR.
+            tp_coef (float): Coefficient for calculating the take profit based on ATR.
+            risk_perc (float): Percentage of cash to risk per trade.
+            lookback_reset_idx (int): Index to reset performance metrics for testing.
+    Methods:
+        __init__(): Initializes the strategy with indicators and tracking variables.
+        notify_trade(trade): Notifies when a trade is closed and updates trade statistics.
+        next(): Defines the logic to be executed on each bar of data.
     """
     params = dict(
         vol_window=24,        
